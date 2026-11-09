@@ -70,6 +70,9 @@ button { font: inherit; color: inherit; }
 .btn--secondary { background: var(--ui-panel); border-color: var(--ui-line); }
 .btn--secondary:hover { background: #f7f4ef; }
 
+.btn--ghost { background: transparent; border-color: transparent; color: var(--ui-muted); padding: 0 14px; }
+.btn--ghost:hover { background: #f3efe8; color: var(--ui-ink); }
+
 .btn--publish {
   background: var(--ui-publish);
   color: #fff;
@@ -126,7 +129,8 @@ button { font: inherit; color: inherit; }
 .topbar__spacer { flex: 1; }
 
 .save-status { color: var(--ui-muted); font-size: 15px; white-space: nowrap; }
-.save-status.is-error { color: var(--ui-danger); }
+.save-status.is-unsaved { color: #a8611d; }
+.save-status.is-error { color: var(--ui-danger); white-space: normal; max-width: 260px; }
 
 /* ---------- Text style bar ---------- */
 
@@ -450,6 +454,9 @@ body > .add-tile { width: 220px; z-index: 1000; box-shadow: 0 10px 30px rgba(0, 
 .image-empty small { font-size: 14px; }
 
 .image-editor .block__media { min-height: 40px; }
+.image-editor img.is-loading { opacity: 0; }
+.image-editor img.is-broken { opacity: 0; }
+.image-editor img { transition: opacity .2s; }
 .image-editor.is-dragover .block__media { outline: 3px solid var(--ui-focus); }
 
 .image-change {
@@ -554,6 +561,89 @@ body > .add-tile { width: 220px; z-index: 1000; box-shadow: 0 10px 30px rgba(0, 
 .publish-done__list li::before { content: "✓ "; color: var(--ui-publish); }
 .tag { font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: #fde7c9; color: #8a4b12; }
 
+/* ---------- Photo library ---------- */
+
+.dialog--media {
+  width: min(920px, 96vw);
+  height: min(760px, 92vh);
+  max-width: none;
+  max-height: none;
+  background: var(--ui-bg);
+}
+.dialog--media[open] { display: flex; flex-direction: column; }
+
+.media-body { flex: 1; overflow-y: auto; padding: 20px 22px 28px; }
+
+.media-upload {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 2px dashed #c9bfae;
+  border-radius: 14px;
+  background: var(--ui-panel);
+  transition: border-color .15s, background-color .15s;
+}
+.media-upload.is-dragover { border-color: var(--ui-focus); background: #eef3fc; }
+.media-upload__icon { font-size: 34px; }
+.media-upload__text { flex: 1; display: flex; flex-direction: column; }
+.media-upload__text strong { font-size: 17px; }
+.media-upload__text small { color: var(--ui-muted); font-size: 15px; }
+
+.media-heading { font-size: 17px; margin: 24px 0 12px; }
+.media-status { color: var(--ui-muted); display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.media-status[hidden] { display: none; }
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 14px;
+}
+
+.media-thumb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 3px solid transparent;
+  border-radius: 14px;
+  background: var(--ui-panel);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .12s, transform .12s, box-shadow .12s;
+}
+.media-thumb:hover { border-color: var(--ui-focus); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, .12); }
+.media-thumb:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 2px; }
+.media-thumb.is-current { border-color: var(--ui-publish); }
+.media-thumb img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--soft);
+}
+.media-thumb__label {
+  padding: 8px 10px;
+  font-size: 14px;
+  color: var(--ui-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.media-thumb.is-current .media-thumb__label { color: var(--ui-publish); font-weight: 700; }
+.media-thumb--uploading {
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 160px;
+  cursor: progress;
+  border: 3px dashed var(--ui-line);
+}
+
+.link-btn--inline { display: inline; width: auto; padding: 0; }
+
 /* ---------- New page dialog ---------- */
 
 .newpage-form { padding: 28px 28px 24px; }
@@ -573,6 +663,7 @@ body > .add-tile { width: 220px; z-index: 1000; box-shadow: 0 10px 30px rgba(0, 
 
 /* Create is first in the markup (Enter = create) but shown on the right. */
 .dialog__actions { display: flex; flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
+.dialog__actions--center { justify-content: center; margin-top: 18px; }
 
 /* ---------- Loading overlay & spinner ---------- */
 
@@ -608,6 +699,7 @@ body > .add-tile { width: 220px; z-index: 1000; box-shadow: 0 10px 30px rgba(0, 
   flex: none;
 }
 .spinner--small { width: 16px; height: 16px; border-width: 2px; border-color: rgba(255, 255, 255, .4); border-top-color: #fff; }
+.spinner--small.spinner--dark { border-color: #d9e3f7; border-top-color: var(--ui-focus); }
 .btn:disabled { opacity: .85; cursor: progress; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

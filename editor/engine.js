@@ -20,9 +20,15 @@
                     pages: [ { file: "index.html", name: "Home" }, … ] }
 
    A published page = page model + site context (the header & menu are the
-   same on every page). Publishing re-renders EVERY page from its model and
+   same on every page). Saving re-renders EVERY page from its model and
    commits only the files whose HTML actually changed — so renaming a page or
    adding a new one automatically updates the menu on all the others.
+
+   Three layers of "saved", only two of which she ever hears about:
+     1. every change    → kept in this browser (localStorage), automatically
+     2. "Save draft"    → committed to the repo's draft branch (dev)
+     3. "Publish live"  → draft merged into the live branch (main) → GitHub Pages
+   Photos are uploaded straight to assets/images/ on the draft branch.
 
    Sections:
       1. Config
@@ -34,9 +40,10 @@
       7. Pages: open / switch / add
       8. Public API: serializeToStaticHTML() & deserializeToEditor()
       9. Autosave
-     10. Publish
-     11. UI wiring
-     12. Boot
+     10. Save draft & Publish live
+     11. Photos: upload + media library
+     12. UI wiring
+     13. Boot
    ========================================================================== */
 
 (function () {
@@ -53,11 +60,24 @@
     minRows: 9,          // empty rows always shown, so there's room to place things low
     themeFile: 'site.css',
     homeFile: 'index.html',
-    // Which repository to edit. In the real app this comes from GitHub sign-in.
-    repo: { owner: 'demo-user', repo: 'my-garden-blog', branch: 'main' },
-    maxImageSide: 1600,
+    demoRepo: { owner: 'demo-user', repo: 'my-garden-blog' },
+    maxImageSide: 1600,     // photos are shrunk to this many px before upload
     autosaveDelay: 700,
   };
+
+  /**
+   * Which repository to edit, and how.
+   * The real app gets { owner, repo, token } from "Sign in with GitHub".
+   * For development it can be set from the console (kept for this tab only):
+   *   Pebble.useGitHub({ owner: 'me', repo: 'my-site', token: 'gho_…' })
+   * Without it, Pebble runs on the in-browser demo repository.
+   */
+  function createService() {
+    let cfg = null;
+    try { cfg = JSON.parse(sessionStorage.getItem('pebble:github') || 'null'); } catch { /* ignore */ }
+    if (cfg && cfg.owner && cfg.repo && cfg.token) return new GitHubService(cfg);
+    return new MockGitHubService(CONFIG.demoRepo);
+  }
 
   /* ========================================================================
      2. SAFETY HELPERS
@@ -84,12 +104,14 @@
   /**
    * Return the URL if it is safe, otherwise ''.
    *  'link'  → http(s), mailto, tel, #anchors, relative paths
-   *  'image' → http(s), relative paths, data:image/… (embedded photos)
+   *  'image' → http(s), relative paths (assets/images/…), data:image/…,
+   *            and blob: (only ever used for on-screen previews)
    */
   function safeUrl(url, kind) {
     const u = String(url ?? '').trim();
     if (!u) return '';
     if (kind === 'image' && /^data:image\/(png|jpe?g|gif|webp|avif|svg\+xml)[;,]/i.test(u)) return u;
+    if (kind === 'image' && /^blob:/i.test(u)) return u;
     if (/^https?:\/\//i.test(u)) return u;
     if (kind === 'link' && /^(mailto:|tel:|#)/i.test(u)) return u;
     if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) return u; // relative path
@@ -218,17 +240,27 @@
       createEditor(data) {
         const wrap = document.createElement('div');
         wrap.className = 'image-editor';
+        // _src is what gets saved: normally a repo path like
+        // "assets/images/20261109-153012-roses.jpg" (relative, so it works
+        // on GitHub Pages). For display it is resolved to a real URL.
         wrap._src = safeUrl(data.src, 'image');
         wrap._caption = data.caption || '';
 
-        const setPhoto = async (file) => {
+        const usePhoto = (path) => {
+          wrap._src = path;
+          render();
+          markDirty();
+        };
+
+        // Clicking the box opens the photo library (upload or reuse).
+        const chooseFromLibrary = () => openMediaLibrary({ current: wrap._src, onPick: usePhoto });
+
+        // Dropping a file from the desktop uploads it directly.
+        const uploadDropped = async (file) => {
           try {
-            wrap._src = await fileToDataUrl(file, CONFIG.maxImageSide);
-            render();
-            markDirty();
+            usePhoto(await uploadPhoto(file));
           } catch (err) {
-            console.warn(err);
-            showToast("Sorry, that file doesn't look like a photo.");
+            reportPhotoError(err);
           }
         };
 
@@ -238,16 +270,16 @@
             const media = document.createElement('div');
             media.className = 'block__media';
             const img = document.createElement('img');
-            img.src = wrap._src;
             img.alt = wrap._caption || 'Photo';
             img.draggable = false;
+            showImage(img, wrap._src);
             media.appendChild(img);
 
             const change = document.createElement('button');
             change.type = 'button';
             change.className = 'image-change';
             change.textContent = '🔄 Change photo';
-            change.addEventListener('click', () => pickImageFile(setPhoto));
+            change.addEventListener('click', chooseFromLibrary);
             media.appendChild(change);
 
             const caption = document.createElement('input');
@@ -268,8 +300,8 @@
             empty.innerHTML =
               '<span class="image-empty__icon" aria-hidden="true">📷</span>' +
               '<strong>Add a photo</strong>' +
-              '<small>Click here, or drag a photo from your computer onto this box</small>';
-            empty.addEventListener('click', () => pickImageFile(setPhoto));
+              '<small>Click to pick one of your photos or add a new one</small>';
+            empty.addEventListener('click', chooseFromLibrary);
             wrap.appendChild(empty);
           }
         };
@@ -285,7 +317,7 @@
         wrap.addEventListener('drop', (e) => {
           wrap.classList.remove('is-dragover');
           const file = e.dataTransfer && e.dataTransfer.files[0];
-          if (file) { e.preventDefault(); setPhoto(file); }
+          if (file) { e.preventDefault(); uploadDropped(file); }
         });
 
         render();
@@ -320,31 +352,53 @@
     },
   };
 
-  /** Shrink a photo in the browser and return it as a data: URL.
-   *  (Real app: commit photos as files next to the page instead.) */
-  function fileToDataUrl(file, maxSide) {
+  /**
+   * Prepare a photo for upload: shrink it to a sensible size in the browser
+   * (phone photos are often 5–10 MB) and return it as a JPEG/PNG Blob.
+   * GIFs are kept as they are, so animations survive. SVG and other types
+   * are refused: an uploaded SVG could carry scripts.
+   */
+  function resizeImage(file, maxSide) {
     return new Promise((resolve, reject) => {
-      if (!file || !/^image\//.test(file.type)) return reject(new Error('Not an image'));
-      if (/gif|svg/.test(file.type)) { // keep animation / vectors
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        return reader.readAsDataURL(file);
+      if (!file || !/^image\/(jpeg|png|gif|webp|heic|heif|avif|bmp)$/i.test(file.type)) {
+        return reject(Object.assign(new Error('Not a photo'), { code: 'not-photo' }));
       }
+      if (file.type === 'image/gif' && file.size < 5e6) return resolve(file);
+
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
         const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
         const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.naturalWidth * scale);
-        canvas.height = Math.round(img.naturalHeight * scale);
+        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
         URL.revokeObjectURL(url);
-        resolve(canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.85));
+        const type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Could not convert photo'))), type, 0.85);
       };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
+      // e.g. iPhone HEIC photos in browsers that can't read them
+      img.onerror = () => { URL.revokeObjectURL(url); reject(Object.assign(new Error('Could not read photo'), { code: 'unreadable' })); };
       img.src = url;
     });
+  }
+
+  const isRepoPath = (src) => !!src && !/^(data:|blob:|https?:)/i.test(src);
+
+  /** A URL the browser can display for a saved src (repo paths are resolved). */
+  function resolveImageUrl(src) {
+    if (!isRepoPath(src)) return Promise.resolve(src);
+    return service.getImageUrl(src.replace(/^\.?\//, ''), readRef());
+  }
+
+  /** Put a photo into an <img>, resolving repo paths in the background. */
+  function showImage(img, src) {
+    if (!isRepoPath(src)) { img.src = src; return; }
+    img.classList.add('is-loading');
+    resolveImageUrl(src)
+      .then((url) => { img.src = url; })
+      .catch((err) => { console.warn('Pebble: photo not found', src, err); img.classList.add('is-broken'); })
+      .finally(() => img.classList.remove('is-loading'));
   }
 
   /* ========================================================================
@@ -612,22 +666,29 @@ ${blocksHtml}
      ------------------------------------------------------------------------
      Each page entry:
        { file:   "about.html",
-         remote: { html, sha } | null   ← last version known to be in the repo
-         draft:  "<html…>"     | null } ← unpublished edits (kept in this browser)
+         remote: { html, sha } | null   ← version in the repo's draft branch
+                                          (or live branch, before any draft exists)
+         draft:  "<html…>"     | null   ← local edits not saved to the repo yet
+         live:   true | false }         ← does the page exist on the live site?
 
-     A page with remote === null is new and has never been published.
-     Drafts are stored in localStorage in the same HTML format as the repo.
+     remote === null  → new page, never saved.   live === false → "New" badge.
+     Local edits are kept in localStorage in the same HTML format as the repo.
      ======================================================================== */
 
-  let service = null; // GitHubService
+  let service = null; // GitHubService (or MockGitHubService in the demo)
 
   const store = {
-    siteName: 'My website', // as published (read from index.html's header)
-    siteNameDraft: null,    // unpublished rename of the site
+    siteName: 'My website', // as saved in the repo (read from index.html's header)
+    siteNameDraft: null,    // local, unsaved rename of the site
     pages: [],              // page entries, in menu order
     current: null,          // file open in the editor
     theme: '',              // site.css from the repo
+    hasDraftBranch: false,  // the draft branch exists in the repo
+    draftAhead: false,      // the saved draft has things that aren't live yet
   };
+
+  /** Branch the editor reads from: the draft once it exists, else live. */
+  const readRef = () => (store.hasDraftBranch ? service.draftBranch : service.liveBranch);
 
   const getEntry = (file) => store.pages.find((p) => p.file === file);
   const entryHtml = (e) => e.draft ?? (e.remote ? e.remote.html : '');
@@ -731,7 +792,7 @@ ${blocksHtml}
     try {
       if (fetch && entry.remote && entry.draft == null) {
         try {
-          const fresh = await service.fetchPage(file);
+          const fresh = await service.fetchPage(file, readRef());
           entry.remote = { html: fresh.content, sha: fresh.sha };
         } catch (err) {
           console.warn('Pebble: using cached copy of', file, err);
@@ -774,7 +835,7 @@ ${blocksHtml}
     name = name.trim();
     if (!name) return;
     const file = fileNameFor(name);
-    const entry = { file, remote: null, draft: null };
+    const entry = { file, remote: null, draft: null, live: false };
     store.pages.push(entry);
     entry.draft = pageModelToHtml({ file, name, blocks: [] }, siteContext());
     persistDrafts();
@@ -832,84 +893,364 @@ ${blocksHtml}
     updateSaveStatus(ok);
   }
 
+  /**
+   * One short sentence about where her work stands. No jargon:
+   *   unsaved local edits      → "Changes not saved yet"
+   *   saved draft, not live    → "Draft saved · not live yet"
+   *   everything live          → "Your website is up to date"
+   */
   function updateSaveStatus(ok = true) {
     const el = $('#save-status');
     el.classList.toggle('is-error', !ok);
-    if (!ok) { el.textContent = "⚠ Couldn't keep a draft (try smaller photos)"; return; }
-    el.textContent = pendingChanges().length ? '✓ Saved · not published yet' : '✓ Everything is published';
+    if (!ok) { el.textContent = "⚠ Couldn't keep your changes on this computer (storage is full)"; return; }
+    const unsaved = pendingChanges().length > 0;
+    el.textContent = unsaved ? '● Changes not saved yet'
+      : store.draftAhead ? '✓ Draft saved · not live yet'
+      : '✓ Your website is up to date';
+    el.classList.toggle('is-unsaved', unsaved);
   }
 
   /* ========================================================================
-     10. PUBLISH — one button publishes the whole site
+     10. SAVE DRAFT & PUBLISH LIVE
      ------------------------------------------------------------------------
-     Re-render every page with the current site context (name + menu) and
-     commit each file whose HTML differs from the repo. Committing only real
-     changes keeps the repo's history clean and the publish fast.
+     Save draft:   re-render every page with the current site context and
+                   commit each one whose HTML changed to the draft branch
+                   (created from live on first use).
+     Publish live: save the draft first, then merge draft → live. GitHub
+                   Pages rebuilds the public site from live.
+     The words "branch", "commit" and "merge" never reach the screen.
      ======================================================================== */
 
-  let isPublishing = false;
+  let isBusy = false;
 
-  async function publishSite() {
-    if (isPublishing) return;
+  /** Disable both buttons and show a spinner in the one that was clicked. */
+  function setBusy(which, label) {
+    isBusy = !!which;
+    const buttons = { save: $('#btn-save'), publish: $('#btn-publish') };
+    for (const [key, btn] of Object.entries(buttons)) {
+      btn.disabled = isBusy;
+      if (!btn.dataset.label) btn.dataset.label = btn.innerHTML;
+      btn.innerHTML = key === which
+        ? `<span class="spinner spinner--small${key === 'save' ? ' spinner--dark' : ''}" aria-hidden="true"></span> ${label}`
+        : btn.dataset.label;
+    }
+  }
+
+  /** Friendly words for anything that went wrong while talking to GitHub. */
+  function friendlyError(err, action) {
+    console.error(`Pebble: ${action} failed`, err);
+    if (err && err.status === 409) return 'Your website was changed somewhere else (maybe on another computer). Please reload the page, then try again — your changes on this computer are kept.';
+    if (err && (err.status === 401 || err.status === 403)) return 'Pebble lost its connection to your website. Please sign in again.';
+    if (err instanceof TypeError) return "You seem to be offline. Your changes are kept on this computer — try again when you're connected.";
+    return `Sorry, ${action} didn't work. Your changes are kept on this computer. Please try again in a moment.`;
+  }
+
+  /**
+   * Commit every changed page to the draft branch.
+   * @returns {Promise<Array<{name, file, isNew}>>} the pages that were saved
+   */
+  async function commitChangesToDraft() {
     flushSave();
     const changes = pendingChanges();
-    if (!changes.length) { showToast('Everything is already published. 👍'); return; }
-
-    isPublishing = true;
-    const btn = $('#btn-publish');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner spinner--small" aria-hidden="true"></span> Publishing…';
-    const published = [];
-
-    try {
-      for (const { entry, html } of changes) {
-        const name = entryModel(entry).name;
-        const isNew = !entry.remote;
-        const result = await service.commitPage(entry.file, html, {
-          message: isNew ? `Add page “${name}”` : `Update page “${name}”`,
-          sha: entry.remote ? entry.remote.sha : undefined,
-        });
-        entry.remote = { html, sha: result.sha };
-        entry.draft = null;
-        published.push({ name, file: entry.file, isNew });
-
-        console.groupCollapsed(`%cPebble ▸ committed ${entry.file} (${result.commitSha.slice(0, 7)})`, 'color:#1f8a4c;font-weight:bold');
-        console.log(html);
-        console.groupEnd();
-      }
+    const saved = [];
+    for (const { entry, html } of changes) {
+      const name = entryModel(entry).name;
+      const isNew = !entry.remote;
+      const result = await service.commitPage(entry.file, html, {
+        message: isNew ? `Add page “${name}”` : `Update page “${name}”`,
+        sha: entry.remote ? entry.remote.sha : undefined,
+      });
+      entry.remote = { html, sha: result.sha };
+      entry.draft = null;
+      saved.push({ name, file: entry.file, isNew });
+      persistDrafts(); // keep local state in step, even if a later page fails
+    }
+    if (changes.length) {
       store.siteName = currentSiteName();
       store.siteNameDraft = null;
-      showPublishDone(published);
-    } catch (err) {
-      console.error('Pebble: publish failed', err);
-      showToast(err.status === 409
-        ? 'This website was changed somewhere else. Please reload, then publish again.'
-        : "Sorry, publishing didn't work. Please try again in a moment.");
-    } finally {
+      store.hasDraftBranch = true;
+      store.draftAhead = true;
       persistDrafts();
-      isPublishing = false;
-      btn.disabled = false;
-      btn.innerHTML = '<span aria-hidden="true">🚀</span> Publish';
+    }
+    return saved;
+  }
+
+  /** "Save draft" button. */
+  async function saveDraft() {
+    if (isBusy) return;
+    flushSave();
+    if (!pendingChanges().length) {
+      showToast(store.draftAhead ? 'Your draft is already saved. Press “Publish live” when you’re ready.' : 'Nothing new to save — your website is up to date.');
+      return;
+    }
+    setBusy('save', 'Saving…');
+    try {
+      await commitChangesToDraft();
+      showToast('Draft saved. Only you can see it until you press “Publish live”.');
+    } catch (err) {
+      showToast(friendlyError(err, 'saving'));
+    } finally {
+      setBusy(null);
       renderPageList();
       updateSaveStatus();
     }
   }
 
-  function showPublishDone(published) {
-    $('#publish-list').innerHTML = published
-      .map((p) => `<li>${escapeHtml(p.name)}${p.isNew ? ' <span class="tag">new</span>' : ''}</li>`)
-      .join('');
+  /** "Publish live" button: save the draft, then make it live. */
+  async function publishLive() {
+    if (isBusy) return;
+    setBusy('publish', 'Publishing…');
+    try {
+      await commitChangesToDraft();
+
+      // What's in the draft that isn't live yet? (also catches photos and
+      // drafts saved earlier, perhaps on another computer)
+      const diff = await service.compareDraftToLive();
+      if (!diff.ahead) {
+        store.draftAhead = false;
+        showToast('Your website is already up to date. 👍');
+        return;
+      }
+
+      let result;
+      try {
+        result = await service.publishDraft('Publish website');
+      } catch (err) {
+        if (err.status !== 409) throw err;
+        // The live site was changed elsewhere and clashes with her draft.
+        // Ask, in plain words, whether her version should win.
+        setBusy(null);
+        if (!(await askToReplaceOtherChanges())) {
+          showToast('Nothing was changed on your website. Your draft is still saved.');
+          return;
+        }
+        setBusy('publish', 'Publishing…');
+        result = await service.forcePublishDraft('Publish website');
+        await refreshSavedPages();
+      }
+      store.draftAhead = false;
+
+      const changedPages = diff.files.filter((f) => /\.html$/.test(f.path) && f.status !== 'removed');
+      const newPhotos = diff.files.filter((f) => f.path.startsWith(service.imageDir + '/') && f.status === 'added').length;
+      const items = changedPages.map((f) => {
+        const entry = getEntry(f.path);
+        const item = { name: entry ? entryModel(entry).name : nameFromFile(f.path), isNew: entry ? !entry.live : f.status === 'added' };
+        if (entry) entry.live = true;
+        return item;
+      });
+      console.info('Pebble ▸ published', result, diff.files);
+      showPublishDone(items, newPhotos);
+    } catch (err) {
+      showToast(friendlyError(err, 'publishing'));
+    } finally {
+      setBusy(null);
+      renderPageList();
+      updateSaveStatus();
+    }
+  }
+
+  /** "Publish your version anyway?" → Promise<boolean> */
+  function askToReplaceOtherChanges() {
+    return new Promise((resolve) => {
+      const dialog = $('#conflict-dialog');
+      const form = dialog.querySelector('form');
+      const onSubmit = (e) => {
+        e.preventDefault();
+        form.removeEventListener('submit', onSubmit);
+        dialog.removeEventListener('cancel', onCancel);
+        dialog.close();
+        resolve(!!(e.submitter && e.submitter.value === 'replace'));
+      };
+      const onCancel = () => {
+        form.removeEventListener('submit', onSubmit);
+        dialog.removeEventListener('cancel', onCancel);
+        resolve(false);
+      };
+      form.addEventListener('submit', onSubmit);
+      dialog.addEventListener('cancel', onCancel); // Esc key
+      dialog.showModal();
+    });
+  }
+
+  /**
+   * After the draft was rebuilt from live (forced publish), refresh the
+   * saved copy of every page so the next save uses the latest versions.
+   * Her local, unsaved edits are kept.
+   */
+  async function refreshSavedPages() {
+    await Promise.all(store.pages.filter((e) => e.remote).map(async (e) => {
+      try {
+        const fresh = await service.fetchPage(e.file, readRef());
+        e.remote = { html: fresh.content, sha: fresh.sha };
+      } catch (err) {
+        if (err.status === 404) e.remote = null; else throw err;
+      }
+    }));
+    modelCache.clear();
+  }
+
+  function showPublishDone(pages, newPhotos) {
+    const rows = pages.map((p) => `<li>${escapeHtml(p.name)}${p.isNew ? ' <span class="tag">new</span>' : ''}</li>`);
+    if (newPhotos) rows.push(`<li>${newPhotos} new photo${newPhotos > 1 ? 's' : ''}</li>`);
+    if (!rows.length) rows.push('<li>Your latest changes</li>');
+    $('#publish-list').innerHTML = rows.join('');
     const link = $('#publish-url');
     link.href = service.siteUrl;
-    link.textContent = service.siteUrl.replace(/^https:\/\//, '');
+    link.textContent = service.siteUrl.replace(/^https:\/\//, '').replace(/\/$/, '');
+    $('#publish-demo-note').hidden = !service.isDemo;
     $('#publish-dialog').showModal();
   }
 
   /* ========================================================================
-     11. UI WIRING
+     11. PHOTOS — upload to the repo + media library
+     ------------------------------------------------------------------------
+     Uploads go straight to assets/images/ in the draft (so they're safe
+     right away and appear in the library), and the block stores the
+     relative path, e.g. "assets/images/20261109-153012-roses.jpg", which
+     works as-is on GitHub Pages because pages live in the repo root.
      ======================================================================== */
 
-  /* ---------- Small helpers: toast, loading, image picker ---------- */
+  /**
+   * Shrink and upload a photo file. Returns its repo path.
+   * Throws with a friendly .code for files that aren't usable photos.
+   */
+  async function uploadPhoto(file) {
+    const blob = await resizeImage(file, CONFIG.maxImageSide);
+    const { path } = await service.uploadImage(blob, { name: file.name });
+    store.hasDraftBranch = true;
+    store.draftAhead = true;
+    updateSaveStatus();
+    return path;
+  }
+
+  function reportPhotoError(err) {
+    if (err && err.code === 'not-photo') showToast('That file isn’t a photo. Please choose a JPG or PNG picture.');
+    else if (err && err.code === 'unreadable') showToast('Sorry, this photo can’t be opened here. Try saving it as a JPG first.');
+    else showToast(friendlyError(err, 'adding the photo'));
+  }
+
+  const mediaState = { onPick: null, current: '' };
+
+  /**
+   * Open the photo library.
+   * @param {object} opts
+   * @param {string} [opts.current]  path of the photo the block shows now
+   * @param {function(string)} opts.onPick  called with the chosen photo's path
+   */
+  function openMediaLibrary({ current = '', onPick }) {
+    mediaState.onPick = onPick;
+    mediaState.current = current;
+    $('#media-dialog').showModal();
+    loadMediaLibrary();
+  }
+
+  /** Fetch /assets/images/ from the repo and draw the thumbnail grid. */
+  async function loadMediaLibrary() {
+    const grid = $('#media-grid');
+    const status = $('#media-status');
+    grid.innerHTML = '';
+    status.hidden = false;
+    status.innerHTML = '<span class="spinner" aria-hidden="true"></span> Finding your photos…';
+    try {
+      const images = await service.fetchImageLibrary(readRef());
+      renderMediaGrid(images);
+      status.hidden = images.length > 0;
+      if (!images.length) status.textContent = 'No photos yet. Add your first one above!';
+    } catch (err) {
+      console.error('Pebble: photo library failed', err);
+      status.innerHTML = 'Sorry, your photos could not be loaded. <button type="button" class="link-btn link-btn--inline" id="media-retry">Try again</button>';
+      $('#media-retry').addEventListener('click', loadMediaLibrary);
+    }
+  }
+
+  function renderMediaGrid(images) {
+    const grid = $('#media-grid');
+    grid.innerHTML = '';
+    for (const image of images) grid.appendChild(createMediaThumb(image));
+  }
+
+  function createMediaThumb({ path, name }) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'media-thumb' + (path === mediaState.current ? ' is-current' : '');
+    btn.dataset.path = path;
+    btn.title = 'Use this photo';
+
+    const img = document.createElement('img');
+    img.alt = '';
+    showImage(img, path);
+
+    const label = document.createElement('span');
+    label.className = 'media-thumb__label';
+    label.textContent = path === mediaState.current ? '✓ In use here' : prettyPhotoName(name);
+
+    btn.append(img, label);
+    return btn;
+  }
+
+  /** "20261109-153012-my-roses.jpg" → "my roses" */
+  function prettyPhotoName(name) {
+    return name.replace(/^\d{8}-\d{6}-/, '').replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+  }
+
+  function pickFromLibrary(path) {
+    $('#media-dialog').close();
+    const cb = mediaState.onPick;
+    mediaState.onPick = null;
+    if (cb) cb(path);
+  }
+
+  /** Upload from inside the library: show a placeholder tile, then use it. */
+  async function uploadFromLibrary(file) {
+    if (!file) return;
+    const grid = $('#media-grid');
+    const tile = document.createElement('div');
+    tile.className = 'media-thumb media-thumb--uploading';
+    tile.innerHTML = '<span class="spinner" aria-hidden="true"></span><span class="media-thumb__label">Adding your photo…</span>';
+    grid.prepend(tile);
+    $('#media-status').hidden = true;
+    try {
+      const path = await uploadPhoto(file);
+      tile.remove();
+      pickFromLibrary(path);
+      showToast('Photo added. ✓');
+    } catch (err) {
+      tile.remove();
+      if (!grid.children.length) loadMediaLibrary();
+      reportPhotoError(err);
+    }
+  }
+
+  function wireMediaLibrary() {
+    const dialog = $('#media-dialog');
+    const input = $('#file-image');
+    const drop = $('#media-upload');
+
+    $('#media-upload-btn').addEventListener('click', () => { input.value = ''; input.click(); });
+    input.addEventListener('change', () => uploadFromLibrary(input.files[0]));
+
+    $('#media-grid').addEventListener('click', (e) => {
+      const thumb = e.target.closest('.media-thumb[data-path]');
+      if (thumb) pickFromLibrary(thumb.dataset.path);
+    });
+
+    // Drag a file from the desktop onto the upload area.
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('is-dragover'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('is-dragover'));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      drop.classList.remove('is-dragover');
+      uploadFromLibrary(e.dataTransfer && e.dataTransfer.files[0]);
+    });
+
+    dialog.addEventListener('close', () => { mediaState.onPick = null; });
+  }
+
+  /* ========================================================================
+     12. UI WIRING
+     ======================================================================== */
+
+  /* ---------- Small helpers: toast, loading ---------- */
 
   let toastTimer = null;
   function showToast(message, actionLabel, onAction) {
@@ -921,7 +1262,7 @@ ${blocksHtml}
     action.onclick = () => { toast.hidden = true; onAction && onAction(); };
     toast.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toast.hidden = true; }, actionLabel ? 7000 : 4000);
+    toastTimer = setTimeout(() => { toast.hidden = true; }, actionLabel ? 7000 : Math.max(4000, message.length * 60));
   }
 
   function showLoading(message) {
@@ -929,14 +1270,6 @@ ${blocksHtml}
     $('#loading').hidden = false;
   }
   function hideLoading() { $('#loading').hidden = true; }
-
-  let pendingImageCallback = null;
-  function pickImageFile(callback) {
-    pendingImageCallback = callback;
-    const input = $('#file-image');
-    input.value = '';
-    input.click();
-  }
 
   /** Put the repo's site.css into the editor so the canvas looks like the site. */
   function applyTheme(css) {
@@ -969,10 +1302,11 @@ ${blocksHtml}
       label.textContent = p.name;
 
       btn.append(icon, label);
-      if (!entry.remote) {
+      if (entry.draft != null) {
+        btn.insertAdjacentHTML('beforeend', '<span class="page-item__dot" title="Changes not saved yet"></span>');
+      }
+      if (!entry.live) {
         btn.insertAdjacentHTML('beforeend', '<span class="page-item__badge" title="This page is not on your website yet">New</span>');
-      } else if (entry.draft != null) {
-        btn.insertAdjacentHTML('beforeend', '<span class="page-item__dot" title="Changes not published yet"></span>');
       }
       li.appendChild(btn);
       list.appendChild(li);
@@ -1119,11 +1453,19 @@ ${blocksHtml}
     const dialog = $('#preview-dialog');
     const frame = $('#preview-frame');
 
-    const showInFrame = (file) => {
+    // The preview has no address of its own, so relative photo paths
+    // ("assets/images/…") are swapped for URLs the browser can load.
+    const showInFrame = async (file) => {
       flushSave();
       const entry = getEntry(file);
       if (!entry) return;
-      frame.srcdoc = pageModelToHtml(entryModel(entry), siteContext(), { inlineCss: store.theme });
+      const model = entryModel(entry);
+      const blocks = await Promise.all(model.blocks.map(async (b) => {
+        if (b.type !== 'image' || !isRepoPath(b.data.src)) return b;
+        const src = await resolveImageUrl(b.data.src).catch(() => b.data.src);
+        return { ...b, data: { ...b.data, src } };
+      }));
+      frame.srcdoc = pageModelToHtml({ ...model, blocks }, siteContext(), { inlineCss: store.theme });
     };
 
     // srcdoc has no real address, so catch menu clicks and render that page.
@@ -1175,6 +1517,7 @@ ${blocksHtml}
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     });
 
+    $('#btn-reset-demo').hidden = !service.isDemo;
     $('#btn-reset-demo').addEventListener('click', () => {
       if (!window.confirm('Reset the demo? This throws away all drafts and everything published in this demo.')) return;
       service.resetDemo();
@@ -1193,8 +1536,10 @@ ${blocksHtml}
     wireSidebar();
     wirePreview();
     wireAdvanced();
+    wireMediaLibrary();
 
-    $('#btn-publish').addEventListener('click', publishSite);
+    $('#btn-save').addEventListener('click', saveDraft);
+    $('#btn-publish').addEventListener('click', publishLive);
 
     document.querySelectorAll('dialog').forEach((d) => {
       d.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => d.close()));
@@ -1221,12 +1566,6 @@ ${blocksHtml}
       markDirty();
     });
 
-    $('#file-image').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file && pendingImageCallback) pendingImageCallback(file);
-      pendingImageCallback = null;
-    });
-
     grid.on('change added removed', () => { markDirty(); refreshEmptyState(); });
 
     // Show the grid lines while moving/resizing, so free placement is obvious.
@@ -1238,7 +1577,7 @@ ${blocksHtml}
   }
 
   /* ========================================================================
-     12. BOOT
+     13. BOOT
      ======================================================================== */
 
   async function boot() {
@@ -1257,48 +1596,59 @@ ${blocksHtml}
       columnOpts: { breakpoints: [] }, // never switch to 1 column while editing
     }, canvasEl());
 
+    service = createService();
     wireUi();
     showLoading('Opening your website…');
 
     try {
-      service = new GitHubService(CONFIG.repo);
-      $('#repo-name').textContent = service.fullName;
+      $('#repo-name').textContent = service.fullName + (service.isDemo ? ' (demo)' : '');
 
-      // 1. What's in the repo?
-      const files = await service.fetchSiteFiles();
+      // 1. Is there a saved draft? Then that's what she edits; otherwise live.
+      store.hasDraftBranch = await service.hasDraft();
+      const ref = readRef();
+
+      // 2. What's in the repo — in the draft, and on the live site?
+      const files = await service.fetchSiteFiles(ref);
+      const liveFiles = store.hasDraftBranch ? await service.fetchSiteFiles(service.liveBranch) : files;
+      const livePaths = new Set(liveFiles.map((f) => f.path));
       const pageFiles = files.map((f) => f.path).filter((p) => /^[a-z0-9][a-z0-9-]*\.html$/.test(p));
 
-      // 2. Theme + every page (small sites: we need all pages for the menu).
-      const [theme, ...pages] = await Promise.all([
+      // 3. Theme + every page (small sites: we need all pages for the menu),
+      //    and whether the saved draft has anything that isn't live yet.
+      const [theme, diff, ...pages] = await Promise.all([
         files.some((f) => f.path === CONFIG.themeFile)
-          ? service.fetchFile(CONFIG.themeFile).then((f) => f.content).catch(() => '')
+          ? service.fetchFile(CONFIG.themeFile, ref).then((f) => f.content).catch(() => '')
           : '',
-        ...pageFiles.map((f) => service.fetchPage(f)),
+        service.compareDraftToLive(),
+        ...pageFiles.map((f) => service.fetchPage(f, ref)),
       ]);
       applyTheme(theme);
-      store.pages = pages.map((p) => ({ file: p.path, remote: { html: p.content, sha: p.sha }, draft: null }));
+      store.draftAhead = diff.ahead;
+      store.pages = pages.map((p) => ({
+        file: p.path, remote: { html: p.content, sha: p.sha }, draft: null, live: livePaths.has(p.path),
+      }));
 
-      // 3. The site name and menu order come from the published homepage.
+      // 4. The site name and menu order come from the homepage.
       const home = getEntry(CONFIG.homeFile);
       const homeModel = home ? parseCached(home.remote.html, CONFIG.homeFile) : null;
       store.siteName = (homeModel && homeModel.siteName) || 'My website';
       sortPages(homeModel ? homeModel.nav : []);
 
-      // 4. Put back her unpublished drafts (including brand-new pages).
+      // 5. Put back changes kept on this computer (including brand-new pages).
       const drafts = loadDrafts();
       store.siteNameDraft = drafts.siteName ?? null;
       for (const [file, html] of Object.entries(drafts.pages || {})) {
         let entry = getEntry(file);
-        if (!entry) { entry = { file, remote: null, draft: null }; store.pages.push(entry); }
+        if (!entry) { entry = { file, remote: null, draft: null, live: false }; store.pages.push(entry); }
         entry.draft = html;
       }
 
       // An empty repo gets a blank homepage.
       if (!store.pages.length) {
-        store.pages.push({ file: CONFIG.homeFile, remote: null, draft: '' });
+        store.pages.push({ file: CONFIG.homeFile, remote: null, draft: '', live: false });
       }
 
-      // 5. Reopen the page she was last working on.
+      // 6. Reopen the page she was last working on.
       let start = null;
       try { start = localStorage.getItem(lastPageKey()); } catch { /* ignore */ }
       if (!getEntry(start)) start = getEntry(CONFIG.homeFile) ? CONFIG.homeFile : store.pages[0].file;
@@ -1306,7 +1656,9 @@ ${blocksHtml}
       await openPage(start, { fetch: false });
     } catch (err) {
       console.error('Pebble: could not open the website', err);
-      showLoading("Sorry, we couldn't open your website. Please reload the page.");
+      showLoading(err && (err.status === 401 || err.status === 403)
+        ? 'Pebble could not get into your website. Please sign in again.'
+        : "Sorry, we couldn't open your website. Please reload the page.");
     }
   }
 
@@ -1320,8 +1672,14 @@ ${blocksHtml}
     pendingChanges,
     openPage,
     createPage,
-    publishSite,
+    saveDraft,
+    publishLive,
+    openMediaLibrary,
     sanitizeRichText,
+    /** Developer hook: edit a real repository (token kept for this tab only). */
+    useGitHub(cfg) { sessionStorage.setItem('pebble:github', JSON.stringify(cfg)); location.reload(); },
+    /** Back to the in-browser demo repository. */
+    useDemo() { sessionStorage.removeItem('pebble:github'); location.reload(); },
     get service() { return service; },
     store,
     WIDGETS,

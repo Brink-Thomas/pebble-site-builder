@@ -33,14 +33,19 @@
 
     <div class="topbar__spacer"></div>
 
-    <!-- Reassurance: she never has to think about "saving". -->
-    <span id="save-status" class="save-status" role="status" aria-live="polite">✓ All changes saved</span>
+    <!-- One plain sentence about where her work stands. -->
+    <span id="save-status" class="save-status" role="status" aria-live="polite"></span>
 
-    <button id="btn-preview" class="btn btn--secondary" type="button">
+    <button id="btn-preview" class="btn btn--ghost" type="button">
       <span aria-hidden="true">👀</span> Preview
     </button>
-    <button id="btn-publish" class="btn btn--publish" type="button">
-      <span aria-hidden="true">🚀</span> Publish
+    <!-- Save draft: safe online, only she can see it. -->
+    <button id="btn-save" class="btn btn--secondary" type="button" title="Keep your changes safe. Only you can see them.">
+      <span aria-hidden="true">💾</span> Save draft
+    </button>
+    <!-- Publish live: everyone can see it. -->
+    <button id="btn-publish" class="btn btn--publish" type="button" title="Put your changes on your website for everyone to see">
+      <span aria-hidden="true">🚀</span> Publish live
     </button>
   </header>
 
@@ -99,8 +104,8 @@
         <ul>
           <li>Hold <b>✥ Move</b> to move a box around. It stays exactly where you let go.</li>
           <li>Pull the <b>corner</b> of a box to make it bigger or smaller.</li>
-          <li>Your work is kept automatically.</li>
-          <li>Press <b>Publish</b> when you're happy. That's it!</li>
+          <li><b>Save draft</b> keeps your work safe. Only you can see it.</li>
+          <li><b>Publish live</b> puts it on your website for everyone.</li>
         </ul>
       </div>
 
@@ -110,7 +115,7 @@
         <button type="button" id="btn-open-file" class="link-btn">Open a page file…</button>
         <button type="button" id="btn-download" class="link-btn">Download this page</button>
         <button type="button" id="btn-reset-demo" class="link-btn link-btn--danger">Reset the demo website</button>
-        <p class="advanced__repo">Website files: <code id="repo-name">…</code> (demo)</p>
+        <p class="advanced__repo">Website files: <code id="repo-name">…</code></p>
       </details>
     </aside>
 
@@ -161,14 +166,31 @@
   <dialog id="publish-dialog" class="dialog dialog--small">
     <div class="publish-done">
       <div class="publish-done__icon" aria-hidden="true">🎉</div>
-      <h2>Your website is updated!</h2>
-      <p>These pages are now on your website:</p>
+      <h2>Your website is live!</h2>
+      <p>Everyone can now see:</p>
       <ul class="publish-done__list" id="publish-list"></ul>
-      <p>Anyone can visit it at <a id="publish-url" target="_blank" rel="noopener"></a>.
-         Changes can take a minute to show up.</p>
-      <p class="publish-done__dev">Prototype: pages were committed to a pretend repository, and the HTML was written to the browser console.</p>
+      <p>Visit it at <a id="publish-url" target="_blank" rel="noopener"></a>.
+         It can take a minute or two to show up.</p>
+      <p class="publish-done__dev" id="publish-demo-note">This is a demo, so nothing was really put online.</p>
       <button type="button" class="btn btn--publish" data-close>Wonderful</button>
     </div>
+  </dialog>
+
+  <!-- ================================================================
+       CHANGED ELSEWHERE — the live site was edited somewhere else in a
+       way that clashes with her draft. Plain words, one clear choice.
+       ================================================================ -->
+  <dialog id="conflict-dialog" class="dialog dialog--small">
+    <form method="dialog" class="publish-done">
+      <div class="publish-done__icon" aria-hidden="true">🤔</div>
+      <h2>Your website was changed somewhere else</h2>
+      <p>Since you started, someone (maybe you, on another computer) changed some of the same pages.</p>
+      <p>Do you want to publish what you see here? On the pages you changed, your version will replace theirs.</p>
+      <div class="dialog__actions dialog__actions--center">
+        <button type="submit" value="replace" class="btn btn--publish">Publish my version</button>
+        <button type="submit" value="cancel" class="btn btn--secondary">Not now</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- ================================================================
@@ -189,6 +211,31 @@
     </form>
   </dialog>
 
+  <!-- ================================================================
+       PHOTO LIBRARY — every photo she has uploaded, as big thumbnails.
+       Upload a new one at the top, or click any photo to use it.
+       ================================================================ -->
+  <dialog id="media-dialog" class="dialog dialog--media" aria-labelledby="media-title">
+    <div class="dialog__bar">
+      <strong id="media-title">Choose a photo</strong>
+      <button type="button" class="btn btn--secondary" data-close>Cancel</button>
+    </div>
+    <div class="media-body">
+      <div class="media-upload" id="media-upload">
+        <span class="media-upload__icon" aria-hidden="true">📤</span>
+        <div class="media-upload__text">
+          <strong>Add a new photo from your computer</strong>
+          <small>or drag a photo here</small>
+        </div>
+        <button type="button" class="btn btn--publish" id="media-upload-btn">Choose a photo…</button>
+      </div>
+
+      <h3 class="media-heading">Your photos</h3>
+      <p class="media-status" id="media-status" role="status" aria-live="polite"></p>
+      <div class="media-grid" id="media-grid"></div>
+    </div>
+  </dialog>
+
   <!-- Covers the editor while a page is being fetched from the repository. -->
   <div id="loading" class="loading" role="status" aria-live="polite" hidden>
     <div class="loading__card">
@@ -204,7 +251,7 @@
   </div>
 
   <!-- Hidden file pickers, opened from buttons. -->
-  <input type="file" id="file-image" accept="image/*" hidden>
+  <input type="file" id="file-image" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif" hidden>
   <input type="file" id="file-page" accept=".html,.htm,text/html" hidden>
 
   <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.js"></script>
