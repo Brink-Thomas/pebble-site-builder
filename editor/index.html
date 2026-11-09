@@ -25,6 +25,8 @@
     <div class="brand" aria-label="Pebble">
       <span class="brand__logo" aria-hidden="true">●</span> Pebble
     </div>
+    <!-- Back to the list of her websites (the start page). -->
+    <a class="btn btn--ghost back-link" id="btn-back" href="../">← Your websites</a>
 
     <label class="page-name">
       <span class="page-name__label">Page name</span>
@@ -241,6 +243,7 @@
     <div class="loading__card">
       <span class="spinner" aria-hidden="true"></span>
       <p class="loading__msg">Opening your website…</p>
+      <a class="btn btn--secondary" id="loading-back" href="../" hidden>← Back to your websites</a>
     </div>
   </div>
 
@@ -255,7 +258,9 @@
   <input type="file" id="file-page" accept=".html,.htm,text/html" hidden>
 
   <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.js"></script>
-  <script src="github-service.js"></script>
+  <script src="../lib/config.js"></script>
+  <script src="../lib/auth.js"></script>
+  <script src="../lib/github-service.js"></script>
   <script src="engine.js"></script>
 </body>
 </html>

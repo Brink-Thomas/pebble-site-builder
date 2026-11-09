@@ -112,6 +112,7 @@ button { font: inherit; color: inherit; }
 .brand { font-weight: 700; font-size: 20px; display: flex; align-items: center; gap: 8px; }
 .brand__logo { color: #b85c38; font-size: 22px; }
 
+.back-link { text-decoration: none; font-size: 15px; min-height: 40px; }
 .page-name { display: flex; align-items: center; gap: 10px; margin-left: 12px; }
 .page-name__label { color: var(--ui-muted); font-size: 15px; }
 .page-name input {
@@ -688,6 +689,8 @@ body > .add-tile { width: 220px; z-index: 1000; box-shadow: 0 10px 30px rgba(0, 
   font-size: 17px;
 }
 .loading__msg { margin: 0; }
+.loading__card:has(#loading-back:not([hidden])) { flex-direction: column; text-align: center; padding: 28px 32px; max-width: 460px; }
+#loading-back { text-decoration: none; }
 
 .spinner {
   width: 22px;

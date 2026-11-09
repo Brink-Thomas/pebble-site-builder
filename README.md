@@ -4,7 +4,8 @@ A tiny drag-and-drop website builder that publishes **plain static HTML**, so a
 site can be hosted for free on GitHub Pages. It has no database: **the HTML
 files are the database.**
 
-Pebble is a **central editor web app**. Each user's website lives in their own
+Pebble is a **central web app**: she connects her hosting account (GitHub),
+picks one of her websites, and edits it. Each user's website lives in their own
 GitHub repository, which holds nothing but the published pages, one
 stylesheet and the photos. The editor reads those files through the GitHub
 REST API, turns them into an editable canvas, and writes the changes back:
@@ -12,13 +13,22 @@ REST API, turns them into an editable canvas, and writes the changes back:
 which GitHub Pages serves.
 
 ```
-index.html               ← landing page: redirects to the editor
-editor/                  ← THE PEBBLE APP (hosted once, for everyone)
-  index.html             ← editor UI
-  editor.css             ← editor-only styling (toolbars, outlines, dialogs)
-  github-service.js      ← GitHubService (real REST API) + MockGitHubService (demo)
+index.html               ← START PAGE: "Connect your hosting account" + "Your websites"
+                           (also the GitHub OAuth callback URL)
+dashboard/               ← start-page script and styles
+lib/                     ← shared by the start page and the editor
+  config.js              ← the only file to edit when deploying (client ID, token endpoint)
+  auth.js                ← PebbleAuth: OAuth login, callback, session
+  github-service.js      ← GitHubClient / GitHubAccount / GitHubService (+ practice-mode mocks)
+editor/                  ← THE EDITOR (opened as editor/?site=owner/repo)
+  index.html  editor.css
   engine.js              ← widgets, page format, multi-page store, Gridstack,
                            save draft / publish live, photo library
+worker/                  ← SERVERLESS TOKEN EXCHANGE (Cloudflare Worker)
+  src/index.js           ← POST /api/token: code → access token (holds the client secret)
+  wrangler.toml          ← deployment settings
+  test.mjs               ← unit tests (node worker/test.mjs)
+  dev-server.mjs         ← run it locally
 example-site/            ← WHAT A USER'S REPOSITORY CONTAINS
   index.html  about.html  contact.html
   site.css               ← the site's theme (the editor loads it too)
@@ -28,32 +38,63 @@ example-site/            ← WHAT A USER'S REPOSITORY CONTAINS
 `example-site/` also seeds the demo repository on first run, and it is a real,
 working website: <https://thomasbrink.be/pebble-site-builder/example-site/>
 
-## Run it
+## Run it locally
 
 ```bash
 python -m http.server 8080
 ```
 
-Then open <http://localhost:8080/editor/>. It has to be served over HTTP
-(`localhost` or `https`): the demo repository seeds itself by fetching
-`example-site/` and computes git SHAs with `crypto.subtle`. To start over, use
-**More options → Reset the demo website**.
+Open <http://localhost:8080/>. Without sign-in configured, the **Connect**
+button is disabled with a note for the site owner. **"Just looking? Try a
+practice website first"** opens practice mode: a demo website stored in your
+browser, with nothing going online. To start practice mode over, use **More
+options → Reset the demo website** in the editor.
 
-### Edit a real repository
+To test sign-in locally, run the token exchange next to it:
 
-The finished product would get the token from "Sign in with GitHub". Until
-then, a developer can point the editor at a real repository from the browser
-console. The token is kept in `sessionStorage`, so only for that tab:
-
-```js
-Pebble.useGitHub({ owner: 'your-name', repo: 'your-site', token: '<OAuth or fine-grained token>' })
-Pebble.useDemo()   // back to the demo
+```bash
+GITHUB_CLIENT_ID=<id> GITHUB_CLIENT_SECRET=<secret> node worker/dev-server.mjs
 ```
 
-The token needs **Contents: read & write** on that repository (classic: `repo`
-or `public_repo`). The repository needs a `main` branch with the site in its
-root folder, and GitHub Pages set to publish from `main`. The `dev` branch is
-created automatically on the first Save draft.
+Then, in the browser console on `http://localhost:8080` (this override only
+works on localhost):
+
+```js
+localStorage.setItem('pebble:dev-config', JSON.stringify({
+  githubClientId: '<id>', tokenEndpoint: 'http://localhost:8787/api/token' }))
+```
+
+Use a separate OAuth App for development, with callback URL
+`http://localhost:8080/`. `node worker/dev-server.mjs --fake` stubs GitHub,
+for trying the flow without any credentials.
+
+## Deploy (one time)
+
+1. **Create a GitHub OAuth App**: github.com → Settings → Developer
+   settings → OAuth Apps → New OAuth App.
+   - Homepage URL and **Authorization callback URL**: where Pebble's start
+     page is hosted, e.g. `https://thomasbrink.be/pebble-site-builder/`
+   - Note the **Client ID**, then generate a **client secret**.
+2. **Deploy the token exchange** (free Cloudflare account):
+   ```bash
+   cd worker
+   npx wrangler login
+   npx wrangler secret put GITHUB_CLIENT_SECRET     # paste the secret
+   npx wrangler deploy
+   ```
+   Before deploying, set `GITHUB_CLIENT_ID`, `ALLOWED_ORIGINS` (where
+   Pebble is hosted) and `ALLOWED_REDIRECT_URIS` (the callback URL) in
+   `wrangler.toml`.
+3. **Fill in `lib/config.js`**: `githubClientId` and `tokenEndpoint`
+   (`https://pebble-oauth.<you>.workers.dev/api/token`). Neither value is
+   secret.
+4. Publish Pebble itself (e.g. GitHub Pages, as this repo does).
+
+What users need: a GitHub account with a website repository whose Pages
+setting publishes **from a branch, root folder** (`/`), and whose homepage
+was made by Pebble. Pebble asks for the `public_repo` scope (free Pages
+sites are public). Set `oauthScope: 'repo'` in `config.js` to include
+private repositories.
 
 ---
 
@@ -65,7 +106,11 @@ comes from one question: *would she understand this without being told?*
 
 | Principle | How it shows up |
 |---|---|
-| **Use everyday words** | "Box", "Photo", "Page", "Save draft", "Publish live". The UI never says *branch*, *commit*, *merge*, *main*, *dev*, *repository* or *deploy*. |
+| **Use everyday words** | "Box", "Photo", "Page", "Website", "Save draft", "Publish live", "hosting account". The UI never says *branch*, *commit*, *merge*, *main*, *dev*, *repository*, *token* or *deploy*. |
+| **GitHub is just "her hosting"** | One big button: **Connect your Hosting Account (GitHub)**, with a sentence explaining that GitHub keeps her website online for free and that she can make an account in the next step. Under it, a reassurance: Pebble only changes a website when she opens it and presses Save or Publish. |
+| **Pick a website, not a project** | After connecting: "Hello, Jane! 👋 Which website would you like to work on?" and a grid of big cards, each with a colourful tile, the website's own name (read from its header, e.g. "My Garden Diary"), its web address and "Updated 3 days ago". Websites made another way sit in a collapsed "Other websites" section, clearly marked as left alone. |
+| **Calm failures** | Cancelling on GitHub: "No problem — your hosting account was not connected." An expired or revoked connection: "For your safety, please connect your hosting account again." Never an error code. |
+| **Try before connecting** | A practice website she can play with freely, with a banner saying nothing goes online. |
 | **Two clear buttons** | **💾 Save draft** keeps her work safe online, where only she can see it. **🚀 Publish live** puts everything on the website for everyone. Publish live also saves first, so she never needs both, and every change made since the last publish goes live together: pages, new pages, photos, and the menu on every page. |
 | **Nothing gets lost** | Every edit is also kept in her browser straight away, so closing the tab loses nothing. One plain status line says where things stand: "● Changes not saved yet", "✓ Draft saved · not live yet" or "✓ Your website is up to date". |
 | **Photos she can find again** | Clicking a photo box opens **Choose a photo**: a big "Add a new photo from your computer" area (or drag one in), and below it every photo she has uploaded, as large thumbnails. One click uses it. The photo in use is marked "✓ In use here". |
@@ -76,9 +121,73 @@ comes from one question: *would she understand this without being told?*
 | **Tools appear where she is looking** | "✥ Move", "🗑 Remove" and the resize corner show only on the box under her mouse. The text style bar lights up once she clicks into text. |
 | **Two ways to do everything** | Drag a tile onto the page or just click it. Pick a photo from the library or drop a photo file onto the box. Switch pages from the sidebar or from the menu on the page. |
 | **Mistakes are cheap** | Removing a box shows "Box removed. **Undo**", and the box comes back in exactly the same spot. |
-| **Hide the plumbing** | Repository names, file downloads and the demo reset are tucked under "More options". |
+| **Hide the plumbing** | Technical names, file downloads and the demo reset are tucked under "More options". |
 
 ## 2. Architecture
+
+### Signing in: GitHub OAuth (web flow)
+
+```
+ Start page (browser)          GitHub                       Token exchange (Worker)
+ ────────────────────          ──────                       ───────────────────────
+ "Connect…" ── redirect ──▶  /login/oauth/authorize
+                             ?client_id&redirect_uri&scope=public_repo&state=<random>
+                             she approves Pebble
+ ◀── redirect ─────────────  <start page>?code=…&state=…
+ check state, strip ?code
+ POST {code, redirect_uri} ──────────────────────────────▶  check Origin + redirect_uri
+                                                            POST /login/oauth/access_token
+                                                            {client_id, client_secret, code}
+ ◀──────────────────────────────── {access_token, scope} ── (nothing stored or logged)
+ GET /user → name + picture
+ save session in localStorage
+```
+
+- **`lib/auth.js` (PebbleAuth):** `login()` creates a random `state`
+  (sessionStorage, valid for 15 minutes) and redirects. `handleCallback()`
+  removes `code` and `state` from the address bar first (no one-time code
+  left in history), rejects a missing, expired or mismatched `state`
+  (prevents forged logins), exchanges the code, looks up the user and stores
+  `{ token, login, name, avatarUrl }`.
+- **`worker/src/index.js`:** the only place the client secret exists. It
+  answers only allowed origins (CORS), only accepts allowed `redirect_uri`s,
+  validates the code's shape, returns `Cache-Control: no-store`, and passes
+  GitHub's error codes through (GitHub reports them with HTTP 200 and an
+  `error` field). It is a Web-standard `fetch` handler, so it also runs on
+  Vercel/Netlify Edge or Deno with a one-line wrapper. 12 unit tests:
+  `node worker/test.mjs`.
+- **Token use:** `GitHubClient` takes `token: () => PebbleAuth.getToken()`,
+  so every request uses the current token, and `onUnauthorized` turns any
+  401 (revoked or expired) into "please connect again". The token is never
+  put in a URL and is only sent to `api.github.com`.
+- **Token storage:** the token sits in `localStorage` so she stays signed in
+  on her own computer; **Sign out** removes it. Anything that runs script on
+  Pebble's origin could read it, so Pebble keeps a strict no-inline-HTML
+  policy (allow-list sanitizer, escaping, inert `DOMParser`). The README's
+  next steps list a CSP and short-lived GitHub App tokens as hardening.
+
+### "Your websites": the site selector
+
+`GitHubAccount.listWebsites()`:
+
+1. `GET /user/repos?affiliation=owner,collaborator,organization_member&sort=pushed`
+   (paginated), keeping repositories she can push to that have GitHub Pages
+   switched on (`has_pages`).
+2. For each one, `GET /repos/{o}/{r}/pages` for the real address (custom
+   domains included) and the branch and folder Pages serves.
+3. It reads `index.html` (draft branch first, then live) and checks for the
+   `data-pebble-grid` marker. If found, the card shows the site's own name
+   from its header.
+
+Each website gets a status: **ready** (made by Pebble, clickable),
+**not-pebble** (made another way) or **unsupported** (Pages serves a
+sub-folder such as `/docs`). Clicking a ready card opens
+`editor/?site=owner/repo`. The editor then calls `getPublishingInfo()` to
+use the right live branch and address. It refuses, with a friendly message
+and a "Back to your websites" button, if the homepage isn't a Pebble page,
+and it leaves any non-Pebble pages out entirely, so Pebble can never
+overwrite a website it didn't make. Tested against a real account: it found
+4 websites and correctly marked all 4 as made another way.
 
 ### The editor is the controller; the repo is just files
 
@@ -100,7 +209,7 @@ are first kept in the browser; **Save draft** commits every changed page to
 uploaded to `dev` the moment she adds them, so they're safe and show up in
 the library right away. They go live with the next publish.
 
-### `GitHubService` (`editor/github-service.js`)
+### `GitHubService` (`lib/github-service.js`)
 
 Real `fetch()` calls to the GitHub REST API (version `2022-11-28`), with
 `Authorization: Bearer <token>` and `cache: 'no-store'`, so she never sees a
@@ -141,7 +250,7 @@ Details that matter:
   is resolved through `getImageUrl()`. A freshly uploaded photo is shown from
   memory straight away, before GitHub's CDN has it.
 
-### `MockGitHubService`: demo mode
+### `MockGitHubService`: practice mode
 
 The demo extends `GitHubService` and replaces **only** `_request()` with a
 small in-browser fake of the endpoints above. It stores git blobs with real
@@ -268,7 +377,10 @@ functions: `defaultData`, `createEditor`, `readData`, `renderStatic` and
   never saved).
 - Photo uploads are limited to JPEG, PNG, GIF and WebP (HEIC is converted
   where the browser can read it); SVG is refused.
-- The token is only ever sent to `api.github.com`.
+- The token is only ever sent to `api.github.com`; the client secret lives
+  only in the worker.
+- Pebble only opens websites whose homepage it made, and never writes
+  pages it didn't make.
 - Page and site names, captions and menu labels are always escaped. New page
   file names must match `^[a-z0-9][a-z0-9-]*\.html$`, which the service also
   enforces.
@@ -286,16 +398,16 @@ await Pebble.service.listCommits('main')   // demo only: history of the fake rep
 
 ## Next steps toward the real app
 
-- **Sign in with GitHub** (an OAuth App, or a GitHub App for fine-grained
-  per-repository access) instead of the console hook, plus onboarding that
-  creates the repository and turns on Pages through the API.
+- **Create a new website** from the start page: create the repository,
+  commit the starter files, and switch on Pages (`POST /repos/{o}/{r}/pages`),
+  all through the API.
+- **Hardening:** a Content-Security-Policy, and a GitHub App instead of an
+  OAuth App, for per-repository access and expiring tokens. A "Sign out
+  everywhere" option could revoke the grant through the worker.
 - **One commit per save:** the Git Data API (blobs → tree → commit → update
-  ref) would save several pages as one atomic commit, and publish photos and
-  pages together.
-- **Photo management:** delete or rename photos; generate smaller thumbnails
-  for faster libraries.
-- **Page management:** delete, rename and reorder pages.
-- Undo/redo history, more block types, and theme presets (which only change
-  `site.css` variables).
+  ref) would save several pages as one atomic commit.
+- **Photo and page management:** delete or rename photos; delete, rename
+  and reorder pages.
+- Undo/redo history, more block types, and theme presets.
 
 Built with [Gridstack.js](https://gridstackjs.com/) 10.3.1 (MIT).

@@ -1,0 +1,19 @@
+# Pebble OAuth token exchange (Cloudflare Worker)
+#
+#   npx wrangler login
+#   npx wrangler secret put GITHUB_CLIENT_SECRET     # paste the OAuth App's client secret
+#   npx wrangler deploy
+#
+# Then put "https://pebble-oauth.<your-subdomain>.workers.dev/api/token" in lib/config.js.
+
+name = "pebble-oauth"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Client ID of your GitHub OAuth App (not secret).
+GITHUB_CLIENT_ID = ""
+# Origins allowed to call the exchange (where Pebble is hosted), comma-separated.
+ALLOWED_ORIGINS = "https://thomasbrink.be"
+# Must equal the OAuth App's callback URL / PEBBLE_CONFIG.redirectUri, comma-separated.
+ALLOWED_REDIRECT_URIS = "https://thomasbrink.be/pebble-site-builder/"

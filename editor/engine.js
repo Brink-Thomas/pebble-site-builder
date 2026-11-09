@@ -66,18 +66,42 @@
   };
 
   /**
-   * Which repository to edit, and how.
-   * The real app gets { owner, repo, token } from "Sign in with GitHub".
-   * For development it can be set from the console (kept for this tab only):
-   *   Pebble.useGitHub({ owner: 'me', repo: 'my-site', token: 'gho_…' })
-   * Without it, Pebble runs on the in-browser demo repository.
+   * Which website to edit comes from the address, chosen on the start page:
+   *   editor/?site=jane-gardens/my-garden-blog   → that repository, using the
+   *                                                 signed-in token
+   *   editor/?site=demo                          → the practice website
+   * The token itself is never in the address: GitHubService asks PebbleAuth
+   * for the current one on every request, and a 401 (revoked / expired)
+   * sends her back to sign in.
+   * Returns null if there's nothing valid to open.
    */
   function createService() {
-    let cfg = null;
-    try { cfg = JSON.parse(sessionStorage.getItem('pebble:github') || 'null'); } catch { /* ignore */ }
-    if (cfg && cfg.owner && cfg.repo && cfg.token) return new GitHubService(cfg);
-    return new MockGitHubService(CONFIG.demoRepo);
+    const site = new URLSearchParams(location.search).get('site') || '';
+    if (site === 'demo') return new MockGitHubService(CONFIG.demoRepo);
+    const m = /^([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\/([A-Za-z0-9._-]{1,100})$/.exec(site);
+    if (!m || !PebbleAuth.getSession()) return null;
+    return new GitHubService({
+      owner: m[1],
+      repo: m[2],
+      token: () => PebbleAuth.getToken(),
+      onUnauthorized: () => PebbleAuth.handleExpired(),
+    });
   }
+
+  /** Back to "Your websites" (keeping practice mode in practice mode). */
+  const dashboardUrl = () => PebbleAuth.appRoot + (service && service.isDemo ? '?demo=1' : '');
+
+  /** Stop with a friendly message and a way back to the website list. */
+  function showBlocked(message) {
+    showLoading(message);
+    $('#loading .spinner').hidden = true;
+    const back = $('#loading-back');
+    back.href = dashboardUrl();
+    back.hidden = false;
+  }
+
+  /** Marker every Pebble page carries; anything else is left alone. */
+  const isPebblePage = (html) => /\bdata-pebble-grid\b/.test(html);
 
   /* ========================================================================
      2. SAFETY HELPERS
@@ -940,7 +964,7 @@ ${blocksHtml}
   function friendlyError(err, action) {
     console.error(`Pebble: ${action} failed`, err);
     if (err && err.status === 409) return 'Your website was changed somewhere else (maybe on another computer). Please reload the page, then try again — your changes on this computer are kept.';
-    if (err && (err.status === 401 || err.status === 403)) return 'Pebble lost its connection to your website. Please sign in again.';
+    if (err && (err.status === 401 || err.status === 403)) return 'Pebble lost its connection to your hosting account. Please connect it again.';
     if (err instanceof TypeError) return "You seem to be offline. Your changes are kept on this computer — try again when you're connected.";
     return `Sorry, ${action} didn't work. Your changes are kept on this computer. Please try again in a moment.`;
   }
@@ -1597,11 +1621,29 @@ ${blocksHtml}
     }, canvasEl());
 
     service = createService();
+    if (!service) {
+      // No website chosen, or not signed in: go to the start page.
+      location.replace(PebbleAuth.appRoot);
+      return;
+    }
     wireUi();
+    $('#btn-back').href = dashboardUrl();
     showLoading('Opening your website…');
 
     try {
-      $('#repo-name').textContent = service.fullName + (service.isDemo ? ' (demo)' : '');
+      $('#repo-name').textContent = service.fullName + (service.isDemo ? ' (practice)' : '');
+
+      // 0. Where does GitHub Pages publish this website from?
+      const publishing = await service.getPublishingInfo();
+      if (publishing) {
+        if (publishing.path && publishing.path !== '/') {
+          showBlocked('This website is set up in a way Pebble can’t edit yet.');
+          return;
+        }
+        if (publishing.branch) service.liveBranch = publishing.branch;
+        if (publishing.url) service.publishedUrl = publishing.url;
+      }
+      if (service.draftBranch === service.liveBranch) service.draftBranch = 'pebble-draft';
 
       // 1. Is there a saved draft? Then that's what she edits; otherwise live.
       store.hasDraftBranch = await service.hasDraft();
@@ -1622,9 +1664,17 @@ ${blocksHtml}
         service.compareDraftToLive(),
         ...pageFiles.map((f) => service.fetchPage(f, ref)),
       ]);
+      // Safety: Pebble only edits websites it made. If the homepage was built
+      // some other way, stop before anything can be overwritten. Other
+      // non-Pebble pages are simply left out (and therefore never touched).
+      const homeFetched = pages.find((p) => p.path === CONFIG.homeFile);
+      if (homeFetched && !isPebblePage(homeFetched.content)) {
+        showBlocked('This website wasn’t made with Pebble, so Pebble won’t change it.');
+        return;
+      }
       applyTheme(theme);
       store.draftAhead = diff.ahead;
-      store.pages = pages.map((p) => ({
+      store.pages = pages.filter((p) => isPebblePage(p.content)).map((p) => ({
         file: p.path, remote: { html: p.content, sha: p.sha }, draft: null, live: livePaths.has(p.path),
       }));
 
@@ -1656,9 +1706,10 @@ ${blocksHtml}
       await openPage(start, { fetch: false });
     } catch (err) {
       console.error('Pebble: could not open the website', err);
-      showLoading(err && (err.status === 401 || err.status === 403)
-        ? 'Pebble could not get into your website. Please sign in again.'
-        : "Sorry, we couldn't open your website. Please reload the page.");
+      if (err && err.status === 401) return; // already on the way to sign in again
+      showBlocked(err && (err.status === 403 || err.status === 404)
+        ? 'Pebble can’t open this website with your hosting account. Please pick one from your list.'
+        : "Sorry, we couldn't open your website. Please check your internet connection and try again.");
     }
   }
 
@@ -1676,10 +1727,7 @@ ${blocksHtml}
     publishLive,
     openMediaLibrary,
     sanitizeRichText,
-    /** Developer hook: edit a real repository (token kept for this tab only). */
-    useGitHub(cfg) { sessionStorage.setItem('pebble:github', JSON.stringify(cfg)); location.reload(); },
-    /** Back to the in-browser demo repository. */
-    useDemo() { sessionStorage.removeItem('pebble:github'); location.reload(); },
+
     get service() { return service; },
     store,
     WIDGETS,
