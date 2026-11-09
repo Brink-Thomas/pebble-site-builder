@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pebble – Edit your page</title>
+
+  <!-- Gridstack: the drag-and-drop grid engine (pinned version). -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack.min.css">
+
+  <!-- site.css is the SAME stylesheet the published pages use. Loading it here
+       means text and photos look identical in the editor and on the live site. -->
+  <link rel="stylesheet" href="../site.css">
+
+  <!-- editor.css only styles the editor "chrome" (toolbars, buttons, outlines). -->
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body class="editor">
+
+  <!-- ================================================================
+       TOP BAR — the only three things that matter: name, look, publish.
+       ================================================================ -->
+  <header class="topbar">
+    <div class="brand" aria-label="Pebble">
+      <span class="brand__logo" aria-hidden="true">●</span> Pebble
+    </div>
+
+    <label class="page-name">
+      <span class="page-name__label">Page name</span>
+      <input id="page-title" type="text" maxlength="80" placeholder="My little blog" autocomplete="off">
+    </label>
+
+    <div class="topbar__spacer"></div>
+
+    <!-- Reassurance: she never has to think about "saving". -->
+    <span id="save-status" class="save-status" role="status" aria-live="polite">✓ All changes saved</span>
+
+    <button id="btn-preview" class="btn btn--secondary" type="button">
+      <span aria-hidden="true">👀</span> Preview
+    </button>
+    <button id="btn-publish" class="btn btn--publish" type="button">
+      <span aria-hidden="true">🚀</span> Publish
+    </button>
+  </header>
+
+  <!-- ================================================================
+       TEXT STYLE BAR — plain-language words, not icons-only.
+       Buttons use mousedown.preventDefault() (see engine.js) so clicking
+       them never steals the cursor from the text being edited.
+       ================================================================ -->
+  <div class="formatbar" id="formatbar" role="toolbar" aria-label="Text style">
+    <span class="formatbar__hint">Click on any text to change how it looks →</span>
+    <div class="formatbar__group">
+      <button type="button" data-cmd="title">Big title</button>
+      <button type="button" data-cmd="subtitle">Small title</button>
+      <button type="button" data-cmd="normal">Normal text</button>
+    </div>
+    <div class="formatbar__group">
+      <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
+      <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+      <button type="button" data-cmd="list" title="Bullet list">• List</button>
+      <button type="button" data-cmd="link" title="Link to another website">🔗 Link</button>
+    </div>
+  </div>
+
+  <div class="workspace">
+
+    <!-- ==============================================================
+         SIDEBAR — "Add to your page". Each tile can be dragged onto the
+         page OR simply clicked (clicking adds it at the bottom).
+         gs-w / gs-h tell Gridstack how big the new box should start.
+         ============================================================== -->
+    <aside class="sidebar">
+      <h2 class="sidebar__title">Add to your page</h2>
+      <p class="sidebar__help">Drag a box onto your page, or just click it.</p>
+
+      <div class="add-tile" data-widget-type="text" gs-w="6" gs-h="3" tabindex="0" role="button">
+        <span class="add-tile__icon" aria-hidden="true">✍️</span>
+        <span class="add-tile__text"><strong>Text</strong><small>Stories, titles, lists</small></span>
+      </div>
+
+      <div class="add-tile" data-widget-type="image" gs-w="6" gs-h="5" tabindex="0" role="button">
+        <span class="add-tile__icon" aria-hidden="true">📷</span>
+        <span class="add-tile__text"><strong>Photo</strong><small>A picture from your computer</small></span>
+      </div>
+
+      <div class="tips">
+        <h3>Good to know</h3>
+        <ul>
+          <li>Hold <b>✥ Move</b> to move a box around.</li>
+          <li>Pull the <b>corner</b> of a box to make it bigger or smaller.</li>
+          <li>Your work is kept automatically.</li>
+          <li>Press <b>Publish</b> when you're happy. That's it!</li>
+        </ul>
+      </div>
+
+      <!-- Rarely needed, so tucked away. -->
+      <details class="advanced">
+        <summary>More options</summary>
+        <button type="button" id="btn-open-file" class="link-btn">Open a page file…</button>
+        <button type="button" id="btn-download" class="link-btn">Download this page</button>
+        <button type="button" id="btn-start-over" class="link-btn link-btn--danger">Start over</button>
+      </details>
+    </aside>
+
+    <!-- ==============================================================
+         CANVAS — a sheet of "paper" that is the same width as the live
+         site, so what she sees is what visitors get.
+         ============================================================== -->
+    <main class="canvas-area">
+      <div class="paper" id="paper">
+        <div class="empty-hint" aria-hidden="true">
+          <p class="empty-hint__big">Your page is empty</p>
+          <p>Drag a <b>Text</b> or <b>Photo</b> box from the left to begin.</p>
+        </div>
+        <div class="grid-stack" id="canvas"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ================================================================
+       PREVIEW — shows the real exported HTML inside an iframe, at
+       computer or phone width.
+       ================================================================ -->
+  <dialog id="preview-dialog" class="dialog dialog--preview">
+    <div class="dialog__bar">
+      <strong>This is how visitors will see your page</strong>
+      <div class="segmented" role="group" aria-label="Screen size">
+        <button type="button" data-device="desktop" class="is-active">💻 Computer</button>
+        <button type="button" data-device="phone">📱 Phone</button>
+      </div>
+      <button type="button" class="btn btn--secondary" data-close>Back to editing</button>
+    </div>
+    <div class="preview-stage">
+      <iframe id="preview-frame" title="Page preview" class="preview-frame"></iframe>
+    </div>
+  </dialog>
+
+  <!-- ================================================================
+       PUBLISH — friendly confirmation. (Prototype: HTML goes to console.)
+       ================================================================ -->
+  <dialog id="publish-dialog" class="dialog dialog--small">
+    <div class="publish-done">
+      <div class="publish-done__icon" aria-hidden="true">🎉</div>
+      <h2>Your page is published!</h2>
+      <p>Anyone with the link can now see it. Changes can take a minute to show up.</p>
+      <p class="publish-done__dev">Prototype: the finished HTML was written to the browser console.</p>
+      <button type="button" class="btn btn--publish" data-close>Wonderful</button>
+    </div>
+  </dialog>
+
+  <!-- Small message at the bottom of the screen ("Box removed — Undo"). -->
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden>
+    <span class="toast__msg"></span>
+    <button type="button" class="toast__action" hidden></button>
+  </div>
+
+  <!-- Hidden file pickers, opened from buttons. -->
+  <input type="file" id="file-image" accept="image/*" hidden>
+  <input type="file" id="file-page" accept=".html,.htm,text/html" hidden>
+
+  <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.js"></script>
+  <script src="engine.js"></script>
+</body>
+</html>

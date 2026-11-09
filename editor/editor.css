@@ -1,0 +1,502 @@
+/* ==========================================================================
+   editor.css — styles for the editor UI only (never published).
+
+   Design rules for our user (a non-technical first-time blogger):
+   - Big, labelled buttons with words, not mystery icons.
+   - One obvious primary action (green Publish).
+   - Editing tools only appear where her mouse is (hover / focus).
+   - Generous spacing, high contrast, 16px+ text everywhere.
+   ========================================================================== */
+
+:root {
+  --ui-bg: #f1ede6;
+  --ui-panel: #ffffff;
+  --ui-ink: #23211e;
+  --ui-muted: #6b665e;
+  --ui-line: #e2dcd2;
+  --ui-focus: #2f6fdf;
+  --ui-publish: #1f8a4c;
+  --ui-publish-hover: #19733f;
+  --ui-danger: #b3261e;
+  --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --topbar-h: 68px;
+  --formatbar-h: 52px;
+}
+
+body.editor {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ui-bg);
+  color: var(--ui-ink);
+  font-family: var(--ui-font);
+  font-size: 16px;
+  overflow: hidden;
+}
+
+button { font: inherit; color: inherit; }
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 20px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color .15s, transform .05s;
+}
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible,
+.formatbar button:focus-visible,
+.add-tile:focus-visible,
+.link-btn:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 2px; }
+
+.btn--secondary { background: var(--ui-panel); border-color: var(--ui-line); }
+.btn--secondary:hover { background: #f7f4ef; }
+
+.btn--publish {
+  background: var(--ui-publish);
+  color: #fff;
+  font-size: 18px;
+  padding: 0 26px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .12);
+}
+.btn--publish:hover { background: var(--ui-publish-hover); }
+
+.link-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 8px 0;
+  color: var(--ui-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.link-btn--danger { color: var(--ui-danger); }
+
+/* ---------- Top bar ---------- */
+
+.topbar {
+  flex: 0 0 var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 20px;
+  background: var(--ui-panel);
+  border-bottom: 1px solid var(--ui-line);
+  z-index: 20;
+}
+
+.brand { font-weight: 700; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+.brand__logo { color: #b85c38; font-size: 22px; }
+
+.page-name { display: flex; align-items: center; gap: 10px; margin-left: 12px; }
+.page-name__label { color: var(--ui-muted); font-size: 15px; }
+.page-name input {
+  font: inherit;
+  font-size: 17px;
+  width: 260px;
+  max-width: 30vw;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-line);
+  border-radius: 10px;
+  background: #fcfbf9;
+}
+.page-name input:focus { outline: 3px solid var(--ui-focus); outline-offset: 0; border-color: transparent; }
+
+.topbar__spacer { flex: 1; }
+
+.save-status { color: var(--ui-muted); font-size: 15px; white-space: nowrap; }
+.save-status.is-error { color: var(--ui-danger); }
+
+/* ---------- Text style bar ---------- */
+
+.formatbar {
+  flex: 0 0 var(--formatbar-h);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 20px;
+  background: #faf8f4;
+  border-bottom: 1px solid var(--ui-line);
+  z-index: 19;
+}
+.formatbar__hint { color: var(--ui-muted); font-size: 15px; }
+.formatbar__group { display: flex; gap: 6px; padding-left: 14px; border-left: 1px solid var(--ui-line); }
+.formatbar button {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-panel);
+  cursor: pointer;
+  font-size: 15px;
+}
+.formatbar button:hover { background: #f3efe8; }
+.formatbar button.is-on { background: #e4ecfb; border-color: #9db8ec; }
+
+/* Inactive until the cursor is inside a text box. */
+.formatbar:not(.is-active) .formatbar__group { opacity: .45; }
+.formatbar.is-active .formatbar__hint { display: none; }
+
+/* ---------- Workspace: sidebar + canvas ---------- */
+
+.workspace { flex: 1; display: flex; min-height: 0; }
+
+.sidebar {
+  flex: 0 0 260px;
+  overflow-y: auto;
+  padding: 22px 18px;
+  background: var(--ui-panel);
+  border-right: 1px solid var(--ui-line);
+}
+.sidebar__title { font-size: 19px; margin: 0 0 4px; }
+.sidebar__help { color: var(--ui-muted); margin: 0 0 16px; font-size: 15px; line-height: 1.4; }
+
+.add-tile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+  border: 2px solid var(--ui-line);
+  border-radius: 14px;
+  background: #fffdfa;
+  cursor: grab;
+  user-select: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.add-tile:hover { border-color: #b85c38; box-shadow: 0 4px 14px rgba(0, 0, 0, .07); }
+.add-tile__icon { font-size: 28px; line-height: 1; }
+.add-tile__text { display: flex; flex-direction: column; }
+.add-tile__text strong { font-size: 17px; }
+.add-tile__text small { color: var(--ui-muted); font-size: 14px; }
+
+/* The copy of a tile that follows the mouse while dragging. */
+body > .add-tile { width: 220px; z-index: 1000; box-shadow: 0 10px 30px rgba(0, 0, 0, .18); }
+
+.tips { margin-top: 26px; padding: 14px 16px; background: #f7f3ec; border-radius: 12px; }
+.tips h3 { margin: 0 0 8px; font-size: 16px; }
+.tips ul { margin: 0; padding-left: 18px; color: var(--ui-muted); font-size: 15px; line-height: 1.5; }
+.tips li { margin-bottom: 6px; }
+
+.advanced { margin-top: 22px; color: var(--ui-muted); font-size: 15px; }
+.advanced summary { cursor: pointer; padding: 6px 0; }
+
+.canvas-area {
+  flex: 1;
+  overflow: auto;
+  padding: 36px 32px 120px;
+}
+
+/* The "paper": same max width as the published .site-grid. Gridstack's
+   items carry their own 8px margin, so the padding is 8px less here. */
+.paper {
+  position: relative;
+  max-width: 1100px;
+  min-height: calc(100% - 20px);
+  margin: 0 auto;
+  padding: 40px 16px 64px;
+  background: var(--bg);
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 8px 30px rgba(0, 0, 0, .06);
+}
+
+.grid-stack { min-height: 420px; }
+
+.empty-hint {
+  display: none;
+  position: absolute;
+  inset: 120px 40px auto;
+  text-align: center;
+  color: var(--ui-muted);
+  font-size: 17px;
+  pointer-events: none;
+}
+.empty-hint__big { font-size: 26px; font-weight: 600; color: var(--ui-ink); margin: 0 0 6px; }
+.paper.is-empty .empty-hint { display: block; }
+
+/* ---------- Blocks on the canvas ---------- */
+
+/* Gridstack's content box normally clips; we let the toolbar poke out above
+   the block and give the inner .block-body the scrolling instead. */
+.grid-stack > .grid-stack-item > .grid-stack-item-content.block-shell {
+  overflow: visible;
+  border-radius: 10px;
+}
+
+.block-body {
+  position: relative;
+  height: 100%;
+  overflow: auto;
+  border-radius: 10px;
+  /* Faint dashed edge so she can see where each box is. */
+  outline: 1px dashed transparent;
+  outline-offset: 4px;
+  transition: outline-color .15s;
+}
+.paper .grid-stack-item:hover .block-body { outline-color: #c9bfae; }
+.paper .grid-stack-item:focus-within .block-body { outline: 2px solid var(--ui-focus); }
+
+.grid-stack-item:hover,
+.grid-stack-item:focus-within { z-index: 50; }
+
+/* Toolbar above each block: Move handle + Remove. */
+.block-bar {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  height: 36px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s;
+}
+.grid-stack-item:hover .block-bar,
+.grid-stack-item:focus-within .block-bar,
+.grid-stack-item.ui-draggable-dragging .block-bar { opacity: 1; pointer-events: auto; }
+
+.block-handle,
+.block-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-panel);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .1);
+  font-size: 14px;
+  font-weight: 600;
+  user-select: none;
+}
+.block-handle { cursor: grab; }
+.block-handle:active { cursor: grabbing; }
+.block-delete { cursor: pointer; color: var(--ui-danger); }
+.block-delete:hover { background: #fdf0ef; }
+
+/* Make Gridstack's resize corner visible and big enough to grab. */
+.grid-stack-item > .ui-resizable-se {
+  width: 22px;
+  height: 22px;
+  right: 2px;
+  bottom: 2px;
+  background: none;
+  transform: none;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.grid-stack-item > .ui-resizable-se::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 12px;
+  height: 12px;
+  border-right: 3px solid var(--ui-focus);
+  border-bottom: 3px solid var(--ui-focus);
+  border-radius: 0 0 4px 0;
+}
+.grid-stack-item:hover > .ui-resizable-handle,
+.grid-stack-item:focus-within > .ui-resizable-handle { opacity: 1; }
+
+/* Where the block will land while dragging. */
+.grid-stack > .grid-stack-placeholder > .placeholder-content {
+  background: rgba(47, 111, 223, .08);
+  border: 2px dashed rgba(47, 111, 223, .6);
+  border-radius: 10px;
+}
+
+/* ---------- Text widget ---------- */
+
+.text-editor {
+  min-height: 100%;
+  outline: none;
+  cursor: text;
+}
+.text-editor.is-empty::before {
+  content: attr(data-placeholder);
+  color: #a39b8f;
+  pointer-events: none;
+}
+
+/* ---------- Photo widget ---------- */
+
+.image-editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.image-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 2px dashed #c9bfae;
+  border-radius: var(--radius);
+  background: #f6f1e9;
+  cursor: pointer;
+  color: var(--ui-muted);
+  text-align: center;
+  padding: 12px;
+}
+.image-empty:hover,
+.image-editor.is-dragover .image-empty { border-color: var(--ui-focus); background: #eef3fc; }
+.image-empty__icon { font-size: 34px; }
+.image-empty strong { color: var(--ui-ink); font-size: 17px; }
+.image-empty small { font-size: 14px; }
+
+.image-editor .block__media { min-height: 40px; }
+.image-editor.is-dragover .block__media { outline: 3px solid var(--ui-focus); }
+
+.image-change {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 0;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.grid-stack-item:hover .image-change,
+.image-change:focus-visible { opacity: 1; }
+
+.image-caption {
+  flex: 0 0 auto;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: .92rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+.image-caption:focus { outline: none; background: #fff; }
+.image-caption::placeholder { color: #b0a89c; }
+
+/* ---------- Dialogs ---------- */
+
+.dialog {
+  border: 0;
+  padding: 0;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
+  font-family: var(--ui-font);
+  color: var(--ui-ink);
+}
+.dialog::backdrop { background: rgba(30, 26, 20, .45); }
+
+.dialog--preview {
+  width: min(1240px, 96vw);
+  height: 92vh;
+  max-width: none;
+  max-height: none;
+  background: var(--ui-bg);
+}
+.dialog--preview[open] { display: flex; flex-direction: column; }
+
+.dialog__bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--ui-panel);
+  border-bottom: 1px solid var(--ui-line);
+}
+.dialog__bar { flex-wrap: wrap; }
+.dialog__bar strong { flex: 1 1 220px; font-size: 17px; }
+
+.segmented { display: inline-flex; border: 1px solid var(--ui-line); border-radius: 10px; overflow: hidden; }
+.segmented button { border: 0; background: var(--ui-panel); padding: 10px 14px; cursor: pointer; font-size: 15px; }
+.segmented button + button { border-left: 1px solid var(--ui-line); }
+.segmented button.is-active { background: #e4ecfb; font-weight: 600; }
+
+.preview-stage { flex: 1; display: flex; justify-content: center; padding: 18px; overflow: auto; }
+.preview-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, .12);
+  transition: width .25s;
+}
+.preview-frame.is-phone { width: 390px; }
+
+.dialog--small { width: min(460px, 92vw); }
+.publish-done { padding: 34px 32px 28px; text-align: center; }
+.publish-done__icon { font-size: 54px; }
+.publish-done h2 { margin: 8px 0 10px; font-size: 26px; }
+.publish-done p { color: var(--ui-muted); line-height: 1.5; font-size: 17px; margin: 0 0 12px; }
+.publish-done__dev { font-size: 14px !important; font-style: italic; }
+.publish-done .btn { margin-top: 10px; }
+
+/* ---------- Toast ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  background: #2b2824;
+  color: #fff;
+  font-size: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+  z-index: 2000;
+}
+.toast[hidden] { display: none; }
+.toast__action {
+  background: none;
+  border: 0;
+  color: #ffd29a;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- Smaller screens ---------- */
+
+@media (max-width: 900px) {
+  body.editor { height: auto; min-height: 100vh; overflow: auto; }
+  .topbar { flex-wrap: wrap; height: auto; padding: 10px 14px; gap: 10px; }
+  .page-name { margin-left: 0; }
+  .page-name__label, .save-status { display: none; }
+  .formatbar { flex-wrap: wrap; height: auto; padding: 8px 14px; }
+  .formatbar__hint { display: none; }
+  .formatbar__group { padding-left: 0; border-left: 0; }
+  .workspace { flex-direction: column; }
+  .sidebar { flex: none; border-right: 0; border-bottom: 1px solid var(--ui-line); }
+  .tips, .advanced { display: none; }
+  .canvas-area { padding: 16px 10px 80px; }
+}
