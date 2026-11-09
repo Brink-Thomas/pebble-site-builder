@@ -2,3 +2,6 @@
 Thumbs.db
 node_modules/
 .claude/settings.local.json
+
+# Wrangler local cache / build output
+.wrangler/
