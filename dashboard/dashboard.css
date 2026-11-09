@@ -179,6 +179,68 @@ a.site-card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0,
 .other-sites summary { cursor: pointer; font-weight: 600; color: var(--muted); padding: 6px 0; }
 .other-sites__note { color: var(--muted); font-size: 15px; margin: 6px 0 16px; }
 
+/* ---------- Create a new website ---------- */
+
+.btn--primary { background: var(--publish); color: #fff; }
+.btn--primary:hover { background: #19733f; }
+.empty .btn { margin-top: 10px; }
+
+.site-card--new {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 260px;
+  border: 2px dashed var(--line);
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.site-card--new:hover { border-color: var(--focus); color: var(--focus); background: #f7f9fe; }
+.site-card--new__plus { font-size: 40px; line-height: 1; }
+
+.dialog {
+  width: min(520px, 92vw);
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
+  color: var(--ink);
+  font-family: var(--font);
+}
+.dialog::backdrop { background: rgba(30, 26, 20, .45); }
+
+.create-form, .create-progress { padding: 30px 30px 26px; }
+.create-form h2, .create-progress h2 { margin: 0 0 16px; font-size: 25px; }
+.create-form__label { display: block; margin-bottom: 8px; }
+.create-form__input {
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 19px;
+}
+.create-form__input:focus { outline: 3px solid var(--focus); border-color: transparent; }
+.create-form__address { margin: 12px 0 4px; color: var(--muted); font-size: 15px; overflow-wrap: anywhere; }
+.create-form__address strong { color: var(--ink); }
+.create-form__note { margin: 0 0 20px; color: var(--muted); font-size: 15px; }
+.create-form__error { margin: 0 0 16px; padding: 10px 14px; border-radius: 10px; background: #fdecea; color: #8c1d18; }
+.dialog__actions { display: flex; flex-direction: row-reverse; gap: 10px; }
+
+.create-progress { text-align: center; }
+.create-progress .spinner { margin: 6px auto 16px; }
+.create-steps { list-style: none; margin: 0 auto; padding: 0; text-align: left; display: inline-block; }
+.create-steps li { padding: 6px 0 6px 30px; position: relative; color: var(--muted); }
+.create-steps li::before { content: "○"; position: absolute; left: 4px; }
+.create-steps li.is-active { color: var(--ink); font-weight: 600; }
+.create-steps li.is-active::before { content: "●"; color: var(--focus); }
+.create-steps li.is-done { color: var(--publish); }
+.create-steps li.is-done::before { content: "✓"; color: var(--publish); }
+
 /* ---------- Spinner ---------- */
 
 .spinner {

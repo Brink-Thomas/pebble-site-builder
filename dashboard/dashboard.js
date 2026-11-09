@@ -168,12 +168,158 @@
     ready.forEach((s) => grid.appendChild(siteCard(s)));
     $('#sites-empty').hidden = ready.length > 0;
 
+    // "Create a new website" (not in practice mode: there is only one there)
+    current = { account, person, takenNames: new Set(sites.map((s) => s.repo.toLowerCase())) };
+    if (!isDemo && ready.length) grid.appendChild(newSiteCard());
+    document.querySelectorAll('[data-create]').forEach((b) => { b.hidden = isDemo; });
+
     $('#other-sites').hidden = others.length === 0;
     $('#other-count').textContent = others.length;
     const otherGrid = $('#other-grid');
     otherGrid.innerHTML = '';
     others.forEach((s) => otherGrid.appendChild(siteCard(s)));
   }
+
+  /* ---------------- create a new website ---------------- */
+
+  let current = null; // { account, person, takenNames }
+
+  function newSiteCard() {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'site-card site-card--new';
+    btn.dataset.create = '';
+    btn.innerHTML = '<span class="site-card--new__plus" aria-hidden="true">＋</span><span>Create a new website</span>';
+    return btn;
+  }
+
+  /** "My Garden Diary!" → "my-garden-diary" (a free name in her account) */
+  function repoNameFor(title) {
+    const base = String(title).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '') || 'my-website';
+    let name = base;
+    for (let i = 2; current && current.takenNames.has(name); i++) name = `${base}-${i}`;
+    return name;
+  }
+
+  const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  /**
+   * The starter homepage, in exactly the format the editor writes
+   * (see pageModelToHtml in editor/engine.js), so a new website opens with
+   * nothing "unsaved".
+   */
+  function starterHomepage(title) {
+    const t = escapeHtml(title);
+    const h = String(title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="Pebble">
+  <title>Home – ${t}</title>
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <!--
+    Made with Pebble. This is plain HTML: no database, no JavaScript.
+    The data-widget-type and data-gs-* attributes let the editor re-open it.
+  -->
+  <header class="site-header">
+    <a class="site-name" href="index.html">${t}</a>
+    <nav class="site-nav" aria-label="Pages">
+      <a href="index.html" aria-current="page">Home</a>
+    </nav>
+  </header>
+
+  <main class="site-grid" data-pebble-grid data-columns="12" data-page-name="Home">
+    <section class="block block--text" data-widget-type="text" data-gs-x="0" data-gs-y="0" data-gs-w="12" data-gs-h="3" style="grid-column:1 / span 12;grid-row:1 / span 3">
+      <div class="block__content"><h2>${h}</h2><p>Welcome! This website is brand new — come back soon.</p></div>
+    </section>
+  </main>
+</body>
+</html>
+`;
+  }
+
+  function openCreateDialog() {
+    if (!current) return;
+    const dialog = $('#create-dialog');
+    $('#create-form').hidden = false;
+    $('#create-progress').hidden = true;
+    $('#create-error').hidden = true;
+    $('#create-title').value = '';
+    updateCreateUrl();
+    dialog.showModal();
+    $('#create-title').focus();
+  }
+
+  function updateCreateUrl() {
+    const title = $('#create-title').value.trim();
+    const login = current && current.person.login;
+    $('#create-url').textContent = title && login ? `${login.toLowerCase()}.github.io/${repoNameFor(title)}` : '…';
+  }
+
+  async function createWebsite(title) {
+    const dialog = $('#create-dialog');
+    $('#create-form').hidden = true;
+    $('#create-progress').hidden = false;
+    const steps = [...document.querySelectorAll('#create-steps li')];
+    steps.forEach((li) => li.classList.remove('is-done', 'is-active'));
+
+    try {
+      // The theme comes from Pebble's own example website.
+      const css = await fetch('example-site/site.css', { cache: 'no-store' }).then((r) => {
+        if (!r.ok) throw new Error('theme not found');
+        return r.text();
+      });
+      const site = await current.account.createWebsite({
+        name: repoNameFor(title),
+        title,
+        files: { 'index.html': starterHomepage(title), 'site.css': css, '.nojekyll': '' },
+        onStep: (step) => {
+          let reached = false;
+          steps.forEach((li) => {
+            if (li.dataset.step === step) { reached = true; li.classList.add('is-active'); li.classList.remove('is-done'); }
+            else if (!reached) { li.classList.remove('is-active'); li.classList.add('is-done'); }
+          });
+        },
+      });
+      steps.forEach((li) => { li.classList.remove('is-active'); li.classList.add('is-done'); });
+      location.assign(`editor/?site=${encodeURIComponent(site.fullName)}`);
+    } catch (err) {
+      console.error('Pebble: could not create the website', err);
+      if (err.status === 401) return; // on the way to sign in again
+      $('#create-progress').hidden = true;
+      $('#create-form').hidden = false;
+      const error = $('#create-error');
+      error.hidden = false;
+      error.textContent = err.code === 'name-taken'
+        ? 'You already have a website or project with that name. Please choose another name.'
+        : err.status === 403 || err.status === 404
+          ? 'Your hosting account didn’t allow Pebble to create a website. Please sign out, connect again, and allow access.'
+          : 'Sorry, something went wrong while setting up your website. Please try again in a moment.';
+      if (!dialog.open) dialog.showModal();
+    }
+  }
+
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-create]')) openCreateDialog();
+  });
+  $('#create-title').addEventListener('input', updateCreateUrl);
+  // Handle the form's submit (dependable across browsers, unlike 'close').
+  $('#create-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const create = e.submitter && e.submitter.value === 'create';
+    if (!create) { $('#create-dialog').close(); return; }
+    const title = $('#create-title').value.trim();
+    if (title) createWebsite(title);
+  });
+  // No closing with Esc while it's being set up.
+  $('#create-dialog').addEventListener('cancel', (e) => {
+    if (!$('#create-progress').hidden) e.preventDefault();
+  });
 
   /* ---------------- start ---------------- */
 

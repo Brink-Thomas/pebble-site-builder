@@ -76,7 +76,8 @@
 
       <div class="empty" id="sites-empty" hidden>
         <p class="empty__big">You don't have a Pebble website yet.</p>
-        <p>Pebble shows the websites it made in your hosting account. Once you have one, it will appear here.</p>
+        <p>Let's make your first one — it only takes a minute.</p>
+        <button type="button" class="btn btn--primary" data-create>＋ Create my first website</button>
       </div>
 
       <details class="other-sites" id="other-sites" hidden>
@@ -86,6 +87,35 @@
       </details>
     </section>
   </main>
+
+  <!-- ============================================================
+       CREATE A NEW WEBSITE — one question, then Pebble does the rest.
+       ============================================================ -->
+  <dialog class="dialog" id="create-dialog" aria-labelledby="create-heading">
+    <form class="create-form" id="create-form" method="dialog">
+      <h2 id="create-heading">Create a new website</h2>
+      <label class="create-form__label" for="create-title">What should your website be called?</label>
+      <input class="create-form__input" id="create-title" type="text" maxlength="60" required
+             placeholder="For example: My Garden Diary" autocomplete="off">
+      <p class="create-form__address">Its address will be <strong id="create-url">…</strong></p>
+      <p class="create-form__note">Everyone will be able to visit it. The very first time, it can take a minute or two before it shows up.</p>
+      <p class="create-form__error" id="create-error" role="alert" hidden></p>
+      <div class="dialog__actions">
+        <button type="submit" value="create" class="btn btn--primary">Create my website</button>
+        <button type="submit" value="cancel" class="btn btn--quiet" formnovalidate>Cancel</button>
+      </div>
+    </form>
+
+    <div class="create-progress" id="create-progress" hidden>
+      <span class="spinner" aria-hidden="true"></span>
+      <h2>Setting up your website…</h2>
+      <ol class="create-steps" id="create-steps">
+        <li data-step="repo">Making room for your website</li>
+        <li data-step="files">Adding your first page</li>
+        <li data-step="pages">Putting it online</li>
+      </ol>
+    </div>
+  </dialog>
 
   <script src="lib/config.js"></script>
   <script src="lib/auth.js"></script>

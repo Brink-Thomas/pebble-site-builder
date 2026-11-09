@@ -9,10 +9,13 @@
 name = "pebble-oauth"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
+# Served at https://pebble-oauth.<subdomain>.workers.dev/api/token
+workers_dev = true
+preview_urls = false
 
 [vars]
 # Client ID of your GitHub OAuth App (not secret).
-GITHUB_CLIENT_ID = ""
+GITHUB_CLIENT_ID = "Ov23liM1SZpS5lCcI97P"
 # Origins allowed to call the exchange (where Pebble is hosted), comma-separated.
 ALLOWED_ORIGINS = "https://thomasbrink.be"
 # Must equal the OAuth App's callback URL / PEBBLE_CONFIG.redirectUri, comma-separated.

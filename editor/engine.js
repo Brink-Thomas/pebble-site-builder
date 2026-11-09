@@ -1634,7 +1634,13 @@ ${blocksHtml}
       $('#repo-name').textContent = service.fullName + (service.isDemo ? ' (practice)' : '');
 
       // 0. Where does GitHub Pages publish this website from?
-      const publishing = await service.getPublishingInfo();
+      // (If Pages settings can't be read, fall back to the default branch.)
+      const publishing = await service.getPublishingInfo().catch((err) => {
+        if (err.status === 401) throw err;
+        console.warn('Pebble: Pages settings not readable', err);
+        return null;
+      });
+      if (!publishing) service.liveBranch = (await service.getRepoInfo()).defaultBranch || service.liveBranch;
       if (publishing) {
         if (publishing.path && publishing.path !== '/') {
           showBlocked('This website is set up in a way Pebble can’t edit yet.');
