@@ -21,6 +21,14 @@
   --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --topbar-h: 68px;
   --formatbar-h: 52px;
+
+  /* Fallbacks for the website theme variables. The real values arrive with
+     the site's own site.css (injected into <style id="site-theme">). */
+  --bg: #fbf8f3;
+  --ink: #2d2a26;
+  --muted: #736c62;
+  --soft: #efe7db;
+  --radius: 14px;
 }
 
 body.editor {
@@ -162,6 +170,53 @@ button { font: inherit; color: inherit; }
   border-right: 1px solid var(--ui-line);
 }
 .sidebar__title { font-size: 19px; margin: 0 0 4px; }
+.sidebar__rule { border: 0; border-top: 1px solid var(--ui-line); margin: 20px 0; }
+
+/* ---------- Page list ---------- */
+
+.page-list { list-style: none; margin: 10px 0 8px; padding: 0; }
+.page-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+.page-item:hover { background: #f5f1ea; }
+.page-item.is-current { background: #e4ecfb; font-weight: 600; }
+.page-item:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 1px; }
+.page-item__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-item__badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fde7c9;
+  color: #8a4b12;
+}
+.page-item__dot { width: 9px; height: 9px; border-radius: 50%; background: #e08a2c; flex: none; }
+
+.add-page {
+  width: 100%;
+  min-height: 44px;
+  border: 2px dashed var(--ui-line);
+  border-radius: 10px;
+  background: none;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ui-muted);
+  cursor: pointer;
+}
+.add-page:hover { border-color: var(--ui-focus); color: var(--ui-focus); background: #f5f8fe; }
+.add-page:focus-visible { outline: 3px solid var(--ui-focus); outline-offset: 2px; }
 .sidebar__help { color: var(--ui-muted); margin: 0 0 16px; font-size: 15px; line-height: 1.4; }
 
 .add-tile {
@@ -193,6 +248,7 @@ body > .add-tile { width: 220px; z-index: 1000; box-shadow: 0 10px 30px rgba(0, 
 
 .advanced { margin-top: 22px; color: var(--ui-muted); font-size: 15px; }
 .advanced summary { cursor: pointer; padding: 6px 0; }
+.advanced__repo { font-size: 13px; margin: 10px 0 0; }
 
 .canvas-area {
   flex: 1;
@@ -207,18 +263,48 @@ body > .add-tile { width: 220px; z-index: 1000; box-shadow: 0 10px 30px rgba(0, 
   max-width: 1100px;
   min-height: calc(100% - 20px);
   margin: 0 auto;
-  padding: 40px 16px 64px;
+  padding: 28px 16px 64px;
   background: var(--bg);
   border-radius: 6px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 8px 30px rgba(0, 0, 0, .06);
 }
 
-.grid-stack { min-height: 420px; }
+/* Site header on the paper: same look as the live site (styles come from
+   the theme), but aligned with the grid's 8px item margin. */
+.paper .site-header { padding: 0 8px; margin-bottom: 24px; }
+.site-name-input {
+  min-width: 0;
+  width: min(100%, 460px);
+  padding: 2px 6px;
+  margin-left: -6px;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--font-heading, Georgia, serif);
+}
+.site-name-input:hover { border-color: #c9bfae; }
+.site-name-input:focus { outline: none; border-color: var(--ui-focus); background: #fff; }
+
+/* Free-form canvas: faint row lines always, the full grid while arranging,
+   so it's clear a box can sit anywhere — including lower down the page. */
+.paper .grid-stack {
+  background-image: linear-gradient(to bottom, rgba(0, 0, 0, .035) 1px, transparent 1px);
+  background-size: 100% 70px;
+  border-radius: 6px;
+  transition: background-color .15s;
+}
+.paper.is-arranging .grid-stack {
+  background-color: rgba(47, 111, 223, .025);
+  background-image:
+    linear-gradient(to right, rgba(47, 111, 223, .12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(47, 111, 223, .12) 1px, transparent 1px);
+  background-size: calc(100% / 12) 70px;
+}
 
 .empty-hint {
   display: none;
   position: absolute;
-  inset: 120px 40px auto;
+  inset: 220px 40px auto;
   text-align: center;
   color: var(--ui-muted);
   font-size: 17px;
@@ -455,6 +541,75 @@ body > .add-tile { width: 220px; z-index: 1000; box-shadow: 0 10px 30px rgba(0, 
 .publish-done p { color: var(--ui-muted); line-height: 1.5; font-size: 17px; margin: 0 0 12px; }
 .publish-done__dev { font-size: 14px !important; font-style: italic; }
 .publish-done .btn { margin-top: 10px; }
+.publish-done__list {
+  list-style: none;
+  padding: 10px 14px;
+  margin: 0 0 14px;
+  background: #f5f1ea;
+  border-radius: 10px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.publish-done__list li { padding: 3px 0; }
+.publish-done__list li::before { content: "✓ "; color: var(--ui-publish); }
+.tag { font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: #fde7c9; color: #8a4b12; }
+
+/* ---------- New page dialog ---------- */
+
+.newpage-form { padding: 28px 28px 24px; }
+.newpage-form h2 { margin: 0 0 16px; font-size: 24px; }
+.newpage-form__label { display: block; font-size: 17px; margin-bottom: 8px; }
+.newpage-form__input {
+  width: 100%;
+  font: inherit;
+  font-size: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--ui-line);
+  border-radius: 10px;
+}
+.newpage-form__input:focus { outline: 3px solid var(--ui-focus); border-color: transparent; }
+.newpage-form__address { color: var(--ui-muted); font-size: 15px; margin: 10px 0 22px; }
+.newpage-form__address code { background: #f5f1ea; padding: 2px 6px; border-radius: 6px; }
+
+/* Create is first in the markup (Enter = create) but shown on the right. */
+.dialog__actions { display: flex; flex-direction: row-reverse; justify-content: flex-start; gap: 10px; }
+
+/* ---------- Loading overlay & spinner ---------- */
+
+.loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(241, 237, 230, .65);
+  z-index: 1500;
+}
+.loading[hidden] { display: none; }
+.loading__card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 26px;
+  background: var(--ui-panel);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .12);
+  font-size: 17px;
+}
+.loading__msg { margin: 0; }
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid #d9e3f7;
+  border-top-color: var(--ui-focus);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  flex: none;
+}
+.spinner--small { width: 16px; height: 16px; border-width: 2px; border-color: rgba(255, 255, 255, .4); border-top-color: #fff; }
+.btn:disabled { opacity: .85; cursor: progress; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- Toast ---------- */
 

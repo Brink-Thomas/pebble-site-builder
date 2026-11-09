@@ -16,8 +16,17 @@
      static row  = 54px + 16px gap  →  a box of height h is 70·h − 16 px tall
      in both places.
 
+   Free-form whitespace
+   --------------------
+   The editor lets blocks float anywhere (Gridstack `float: true`), leaving
+   empty rows above or between them. Because every block is placed on
+   explicit row lines (grid-row: 10 / span 3), CSS Grid creates the empty
+   rows in between automatically, each at least one --row tall. A gap of
+   two empty rows in the editor is a gap of two empty rows on the live site.
+
    On phones (< 720px) every block simply stacks full-width in reading order
    (top-to-bottom, left-to-right — the editor writes blocks in that order).
+   Desktop whitespace is intentionally collapsed there.
    ========================================================================== */
 
 :root {
@@ -50,12 +59,49 @@ body {
   font-family: var(--font-body);
 }
 
+/* ---------- Site header: name + page menu (same on every page) ---------- */
+
+.site-header {
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 28px 24px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 28px;
+}
+
+.site-name {
+  font-family: var(--font-heading);
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+.site-nav a {
+  padding: 8px 16px;
+  border-radius: 999px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 1rem;
+}
+.site-nav a:hover { background: var(--soft); }
+.site-nav a[aria-current="page"] { background: var(--ink); color: var(--bg); }
+
 /* ---------- The page grid ---------- */
 
 .site-grid {
   max-width: var(--page-width);
   margin: 0 auto;
-  padding: 48px 24px 72px;
+  padding: 32px 24px 72px;
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   /* "at least one row tall, but grow if the text needs more room" — so a
@@ -161,10 +207,13 @@ body {
 /* ---------- Phones & small tablets: one simple column ---------- */
 
 @media (max-width: 720px) {
+  .site-header { padding: 20px 18px 0; }
+  .site-nav { margin-left: -12px; }
+
   .site-grid {
     grid-template-columns: 1fr;
     grid-auto-rows: auto;
-    padding: 28px 18px 56px;
+    padding: 24px 18px 56px;
     gap: 22px;
   }
 

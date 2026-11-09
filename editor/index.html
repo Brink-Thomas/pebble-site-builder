@@ -8,12 +8,13 @@
   <!-- Gridstack: the drag-and-drop grid engine (pinned version). -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack.min.css">
 
-  <!-- site.css is the SAME stylesheet the published pages use. Loading it here
-       means text and photos look identical in the editor and on the live site. -->
-  <link rel="stylesheet" href="../site.css">
-
   <!-- editor.css only styles the editor "chrome" (toolbars, buttons, outlines). -->
   <link rel="stylesheet" href="editor.css">
+
+  <!-- The website's own site.css, fetched from the user's repository at start-up
+       (see engine.js → applyTheme). Text and photos therefore look identical in
+       the editor and on the live site. Kept last so the theme wins. -->
+  <style id="site-theme"></style>
 </head>
 <body class="editor">
 
@@ -71,6 +72,15 @@
          gs-w / gs-h tell Gridstack how big the new box should start.
          ============================================================== -->
     <aside class="sidebar">
+      <!-- Pages of the website, read from the repository. -->
+      <h2 class="sidebar__title">Your pages</h2>
+      <ul class="page-list" id="page-list" aria-label="Pages"></ul>
+      <button type="button" class="add-page" id="btn-add-page">
+        <span aria-hidden="true">＋</span> Add a new page
+      </button>
+
+      <hr class="sidebar__rule">
+
       <h2 class="sidebar__title">Add to your page</h2>
       <p class="sidebar__help">Drag a box onto your page, or just click it.</p>
 
@@ -87,7 +97,7 @@
       <div class="tips">
         <h3>Good to know</h3>
         <ul>
-          <li>Hold <b>✥ Move</b> to move a box around.</li>
+          <li>Hold <b>✥ Move</b> to move a box around. It stays exactly where you let go.</li>
           <li>Pull the <b>corner</b> of a box to make it bigger or smaller.</li>
           <li>Your work is kept automatically.</li>
           <li>Press <b>Publish</b> when you're happy. That's it!</li>
@@ -99,7 +109,8 @@
         <summary>More options</summary>
         <button type="button" id="btn-open-file" class="link-btn">Open a page file…</button>
         <button type="button" id="btn-download" class="link-btn">Download this page</button>
-        <button type="button" id="btn-start-over" class="link-btn link-btn--danger">Start over</button>
+        <button type="button" id="btn-reset-demo" class="link-btn link-btn--danger">Reset the demo website</button>
+        <p class="advanced__repo">Website files: <code id="repo-name">…</code> (demo)</p>
       </details>
     </aside>
 
@@ -109,9 +120,17 @@
          ============================================================== -->
     <main class="canvas-area">
       <div class="paper" id="paper">
+        <!-- The site header exactly as visitors see it. The site name can be
+             changed right here; menu links switch pages. -->
+        <header class="site-header">
+          <input class="site-name site-name-input" id="site-name" type="text" maxlength="60"
+                 aria-label="Website name" title="Click to change your website's name">
+          <nav class="site-nav" id="paper-nav" aria-label="Pages"></nav>
+        </header>
+
         <div class="empty-hint" aria-hidden="true">
-          <p class="empty-hint__big">Your page is empty</p>
-          <p>Drag a <b>Text</b> or <b>Photo</b> box from the left to begin.</p>
+          <p class="empty-hint__big">This page is empty</p>
+          <p>Drag a <b>Text</b> or <b>Photo</b> box from the left and drop it anywhere.</p>
         </div>
         <div class="grid-stack" id="canvas"></div>
       </div>
@@ -142,12 +161,41 @@
   <dialog id="publish-dialog" class="dialog dialog--small">
     <div class="publish-done">
       <div class="publish-done__icon" aria-hidden="true">🎉</div>
-      <h2>Your page is published!</h2>
-      <p>Anyone with the link can now see it. Changes can take a minute to show up.</p>
-      <p class="publish-done__dev">Prototype: the finished HTML was written to the browser console.</p>
+      <h2>Your website is updated!</h2>
+      <p>These pages are now on your website:</p>
+      <ul class="publish-done__list" id="publish-list"></ul>
+      <p>Anyone can visit it at <a id="publish-url" target="_blank" rel="noopener"></a>.
+         Changes can take a minute to show up.</p>
+      <p class="publish-done__dev">Prototype: pages were committed to a pretend repository, and the HTML was written to the browser console.</p>
       <button type="button" class="btn btn--publish" data-close>Wonderful</button>
     </div>
   </dialog>
+
+  <!-- ================================================================
+       ADD A NEW PAGE — asks for a name; the file name is made from it.
+       ================================================================ -->
+  <dialog id="newpage-dialog" class="dialog dialog--small">
+    <form method="dialog" class="newpage-form">
+      <h2>Add a new page</h2>
+      <label class="newpage-form__label" for="newpage-name">What should the page be called?</label>
+      <input id="newpage-name" class="newpage-form__input" type="text" maxlength="40" required
+             placeholder="For example: My recipes" autocomplete="off">
+      <p class="newpage-form__address">Its web address will end in <code id="newpage-file">…</code></p>
+      <!-- "Create" is first in the markup so pressing Enter creates the page. -->
+      <div class="dialog__actions">
+        <button type="submit" value="create" class="btn btn--publish">Create page</button>
+        <button type="submit" value="cancel" class="btn btn--secondary" formnovalidate>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Covers the editor while a page is being fetched from the repository. -->
+  <div id="loading" class="loading" role="status" aria-live="polite" hidden>
+    <div class="loading__card">
+      <span class="spinner" aria-hidden="true"></span>
+      <p class="loading__msg">Opening your website…</p>
+    </div>
+  </div>
 
   <!-- Small message at the bottom of the screen ("Box removed — Undo"). -->
   <div id="toast" class="toast" role="status" aria-live="polite" hidden>
@@ -160,6 +208,7 @@
   <input type="file" id="file-page" accept=".html,.htm,text/html" hidden>
 
   <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.js"></script>
+  <script src="github-service.js"></script>
   <script src="engine.js"></script>
 </body>
 </html>
