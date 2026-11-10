@@ -105,6 +105,7 @@ export async function boot() {
     openDoc(start);
     flushNow();
     emit();
+    if (!upgraded && !store.remote.get('index.html')) toast('Your website is ready. Press “Publish” to put it online.');
     if (upgraded) toast('Pebble has been rebuilt to be faster. Your website was moved over — press “Publish” once to update it.');
   } catch (err) {
     console.error('Pebble: could not open the website', err);

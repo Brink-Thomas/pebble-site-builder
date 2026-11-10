@@ -188,6 +188,11 @@ comes from one question: *would she understand this without being told?*
    Pebble's marker (`<meta name="generator" content="Pebble">`, or
    `data-pebble-grid` for sites from Pebble v2–v4). If found, the card shows
    the site's own name from its header.
+4. A repository with **no** `index.html` but a `site.json` with
+   `"generator": "Pebble"` (written by hand or by an AI) is also editable.
+   Its card says "Not online yet — open it and press Publish"; the editor
+   says the same, and the first Publish compiles every page. A repository
+   whose `index.html` was made another way is still left alone.
 
 Each website gets a status: **ready** (made by Pebble, clickable),
 **not-pebble** (made another way) or **unsupported** (Pages serves a

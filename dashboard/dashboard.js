@@ -117,7 +117,7 @@
     const meta = document.createElement('p');
     meta.className = 'site-card__meta';
     meta.textContent = ready
-      ? (updatedAgo(site.updatedAt) || 'Ready to edit')
+      ? (site.unpublished ? 'Not online yet — open it and press Publish' : updatedAgo(site.updatedAt) || 'Ready to edit')
       : site.status === 'unsupported'
         ? 'Set up in a way Pebble can’t edit'
         : 'Made with another tool';
