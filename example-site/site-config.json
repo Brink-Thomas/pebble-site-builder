@@ -1,0 +1,53 @@
+{
+  "generator": "Pebble",
+  "version": 2,
+  "siteName": "My Garden Diary",
+  "pages": [
+    {
+      "file": "index.html",
+      "title": "Home",
+      "showInNavbar": true
+    },
+    {
+      "file": "about.html",
+      "title": "About me",
+      "showInNavbar": true
+    },
+    {
+      "file": "blog.html",
+      "title": "Blog",
+      "showInNavbar": true
+    },
+    {
+      "file": "contact.html",
+      "title": "Contact",
+      "showInNavbar": true
+    }
+  ],
+  "posts": [
+    {
+      "file": "blog/starting-from-seed.html",
+      "title": "Starting from seed",
+      "date": "2026-11-02",
+      "thumbnail": "assets/images/tomatoes.svg",
+      "excerpt": "This spring I tried growing everything from seed on the kitchen windowsill. Some things worked beautifully, others… not so much. Tomatoes: every single seed…",
+      "excerptAuto": true
+    },
+    {
+      "file": "blog/roses-in-november.html",
+      "title": "Roses in November",
+      "date": "2026-11-08",
+      "thumbnail": "assets/images/roses.svg",
+      "excerpt": "Who would have thought: the roses are still flowering in November. The mild autumn kept them going, and the last buds are opening along the fence. Time to…",
+      "excerptAuto": true
+    }
+  ],
+  "theme": {
+    "primaryColor": "#b85c38",
+    "secondaryColor": "#6b8b4f",
+    "fontFamily": "classic",
+    "borderRadius": 14,
+    "blockSpacing": 16
+  },
+  "customCss": false
+}

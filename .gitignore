@@ -5,3 +5,4 @@ node_modules/
 
 # Wrangler local cache / build output
 .wrangler/
+.cloudflare/

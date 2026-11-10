@@ -6,9 +6,10 @@ files are the database.**
 
 Pebble is a **central web app**: she connects her hosting account (GitHub),
 picks one of her websites, and edits it. Each user's website lives in their own
-GitHub repository, which holds nothing but the published pages, one
-stylesheet and the photos. The editor reads those files through the GitHub
-REST API, turns them into an editable canvas, and writes the changes back:
+GitHub repository, which holds nothing but the published website: stitched
+HTML pages and blog posts, `site-config.json`, `global.css`, the header and
+footer partials, and the photos. The editor reads those files through the
+GitHub REST API, turns them into an editable canvas, and writes the changes back:
 **Save draft** to a `dev` branch, **Publish live** by merging `dev` into `main`,
 which GitHub Pages serves.
 
@@ -19,20 +20,16 @@ dashboard/               ← start-page script and styles
 lib/                     ← shared by the start page and the editor
   config.js              ← the only file to edit when deploying (client ID, token endpoint)
   auth.js                ← PebbleAuth: OAuth login, callback, session
+  site-format.js         ← PebbleFormat: the website format — blocks, stitching,
+                           site-config.json, global.css, upgrading older sites
+  site-base.css          ← Pebble's base styles (become the body of every global.css)
   github-service.js      ← GitHubClient / GitHubAccount / GitHubService (+ practice-mode mocks)
 editor/                  ← THE EDITOR (opened as editor/?site=owner/repo)
   index.html  editor.css
-  engine.js              ← widgets, page format, multi-page store, Gridstack,
-                           save draft / publish live, photo library
+  engine.js              ← block editors, Gridstack canvas, pages/posts/header/footer,
+                           Add drawer, Site Settings, save draft / publish live, photos
 worker/                  ← SERVERLESS TOKEN EXCHANGE (Cloudflare Worker)
-  src/index.js           ← POST /api/token: code → access token (holds the client secret)
-  wrangler.toml          ← deployment settings
-  test.mjs               ← unit tests (node worker/test.mjs)
-  dev-server.mjs         ← run it locally
-example-site/            ← WHAT A USER'S REPOSITORY CONTAINS
-  index.html  about.html  contact.html
-  site.css               ← the site's theme (the editor loads it too)
-  assets/images/         ← uploaded photos
+example-site/            ← WHAT A USER'S REPOSITORY CONTAINS (see "The website format")
 ```
 
 `example-site/` also seeds the demo repository on first run, and it is a real,
@@ -108,6 +105,11 @@ comes from one question: *would she understand this without being told?*
 |---|---|
 | **Use everyday words** | "Box", "Photo", "Page", "Website", "Save draft", "Publish live", "hosting account". The UI never says *branch*, *commit*, *merge*, *main*, *dev*, *repository*, *token* or *deploy*. |
 | **GitHub is just "her hosting"** | One big button: **Connect your Hosting Account (GitHub)**, with a sentence explaining that GitHub keeps her website online for free and that she can make an account in the next step. Under it, a reassurance: Pebble only changes a website when she opens it and presses Save or Publish. |
+| **Add things with one big button** | **＋ Add** opens a drawer of boxes with big icons and one-line descriptions — Text, Photo, Card, Button, Blog posts — that she drags straight onto the page (or clicks). Boxes that need a choice (a button's destination, custom code) open their **⚙ Settings** right away. |
+| **The whole website, not just a page** | The sidebar shows **Pages**, **Blog posts** and **On every page** (“Top of every page”, “Bottom of every page”). The page she edits sits between the real top and bottom of her site; clicking either one opens it. |
+| **Hiding a page is a switch** | “Show link in website menu” on every page. The page stays on the website; only its menu link goes. |
+| **Blogging without thinking about it** | **＋ Write a blog post** asks for a title and opens a page with a date, cover photo and summary (left empty, Pebble uses the first words). Her first post also creates a “Blog” page listing all posts. |
+| **Design in her words** | **🎨 Site Settings**: main color, second color, “Letters”, **Roundness** (Square ↔ Round) and **Spacing** (Snug ↔ Airy). Everything updates as she moves the slider. |
 | **Pick a website, not a project** | After connecting: "Hello, Jane! 👋 Which website would you like to work on?" and a grid of big cards, each with a colourful tile, the website's own name (read from its header, e.g. "My Garden Diary"), its web address and "Updated 3 days ago". Websites made another way sit in a collapsed "Other websites" section, clearly marked as left alone. |
 | **Calm failures** | Cancelling on GitHub: "No problem — your hosting account was not connected." An expired or revoked connection: "For your safety, please connect your hosting account again." Never an error code. |
 | **Try before connecting** | A practice website she can play with freely, with a banner saying nothing goes online. |
@@ -116,7 +118,7 @@ comes from one question: *would she understand this without being told?*
 | **Photos she can find again** | Clicking a photo box opens **Choose a photo**: a big "Add a new photo from your computer" area (or drag one in), and below it every photo she has uploaded, as large thumbnails. One click uses it. The photo in use is marked "✓ In use here". |
 | **Forgiving when something clashes** | If the live site was changed somewhere else, she gets a plain question ("Publish my version" / "Not now") instead of an error. Being offline or losing access gets a sentence that says her changes are kept. |
 | **Pages are a simple list** | "Your pages" in the sidebar: 🏠 Home, 📄 About me… A **New** badge marks a page that isn't on the live website yet, and an orange dot marks changes that aren't saved yet. **＋ Add a new page** asks only for a name and shows the web address it will get. |
-| **What you see is what visitors get** | The canvas shows the site's real header and menu (clicking a menu item opens that page), uses the site's own `site.css`, and is exactly as wide as the live page. The block layout is pixel-identical. **👀 Preview** shows the real exported HTML at computer or phone size, and its menu links work. |
+| **What you see is what visitors get** | The page sits between the site's real header and footer, uses the site's own `global.css` and `theme.css`, and is exactly as wide as the live page. The block layout is pixel-identical. **👀 Preview** shows the real exported HTML at computer or phone size, and its menu links work. |
 | **Things stay where she puts them** | Free-form layout: a box dropped low on the page stays there, with empty space above it. Faint row lines show it's a canvas, and the full grid appears while she drags. |
 | **Tools appear where she is looking** | "✥ Move", "🗑 Remove" and the resize corner show only on the box under her mouse. The text style bar lights up once she clicks into text. |
 | **Two ways to do everything** | Drag a tile onto the page or just click it. Pick a photo from the library or drop a photo file onto the box. Switch pages from the sidebar or from the menu on the page. |
@@ -189,25 +191,103 @@ and it leaves any non-Pebble pages out entirely, so Pebble can never
 overwrite a website it didn't make. Tested against a real account: it found
 4 websites and correctly marked all 4 as made another way.
 
-### The editor is the controller; the repo is just files
+### The website format (`lib/site-format.js`)
+
+A Pebble website, as files in the user's repository:
 
 ```
- user's GitHub repo                              Pebble editor (central app)
- ──────────────────                              ───────────────────────────
- dev  (draft)   index.html about.html …  ──read──▶  htmlToPageModel() ─▶ canvas
-                site.css  assets/images/*  ◀─PUT─── Save draft: changed pages
-                                           ◀─PUT─── photo uploads
-        │
-        │  POST /merges   ◀─────────────────────── Publish live
-        ▼
- main (live)  ──▶ GitHub Pages ──▶ https://{owner}.github.io/{repo}/
+site-config.json     site name · pages (+ showInNavbar) · blog posts (title, date,
+                     thumbnail, excerpt) · design settings · customCss flag
+global.css           :root { --primary-color … } + Pebble's base styles
+theme.css            optional extra CSS from a helper (loaded after global.css)
+header.html          the top of every page    ┐ "partials": a grid of blocks,
+footer.html          the bottom of every page ┘ edited like a page
+index.html …         pages        ┐ STITCHED: <head> + header + page + footer,
+blog/*.html          blog posts   ┘ so visitors get plain HTML with no JavaScript
+assets/images/*      photos
 ```
 
-The editor reads from `dev` once it exists, otherwise from `main`. Page edits
-are first kept in the browser; **Save draft** commits every changed page to
-`dev`, and **Publish live** saves, then merges `dev` into `main`. Photos are
-uploaded to `dev` the moment she adds them, so they're safe and show up in
-the library right away. They go live with the next publish.
+**Client-side static generation.** The editor keeps the website as plain data
+(config, a list of blocks per page/post/partial, custom CSS). When she saves,
+`PebbleFormat.buildSiteFiles()` renders **every** file from that data:
+`site-config.json`, `global.css`, `theme.css`, both partials, and each page
+and post wrapped in the header and footer. It then commits **only the files
+whose text changed**. That single rule makes everything consistent:
+
+- editing the footer, renaming a page or hiding it from the menu re-stitches
+  every page that shows it;
+- publishing a new post updates every page with a Blog posts box;
+- untouched files produce no commit.
+
+**The stitching** (`stitchPage`). Each page gets `<head>` (title, description
+for posts, `global.css`, plus `theme.css` if present), the header region, an
+automatic post header for blog posts (date, title, cover photo), the page grid
+and the footer region. Paths are stored relative to the site root
+(`about.html`, `assets/images/x.jpg`, `blog/my-post.html`) and are given a
+`../` prefix when rendered into a page inside `blog/`. The prefix is removed
+again when the page is read back.
+
+**Round-trip guarantee.** Reading any file back and rendering it again gives
+**byte-identical** output. Tested: every file of a saved site, starter
+websites, and names such as "Café & Crêpes <3".
+
+**Upgrading older websites.** A site made before this format (no
+`site-config.json`, each page carrying its own header, `site.css`) is
+upgraded in memory when opened. Its name and menu order come from the old
+header, pages keep their blocks, and the default header and footer are added.
+Pebble tells her: "press Publish live once to put it online".
+
+### Blocks
+
+| Block | Published as | Notes |
+|---|---|---|
+| Text | `section.editor-block.block-text` → `.rich-text` | allow-listed HTML only |
+| Photo | `figure.editor-block.block-image` | from the photo library; caption |
+| Card | `article.editor-block.block-card` → `__media`, `__title`, `__text`, `__link` | photo + title + text + optional link |
+| Button | `div.editor-block.block-button--{left,center,right}` → `a.block-button__link--{primary,secondary}` | links to a page, a post or another website |
+| Blog posts | `section.editor-block.block-blog-feed` → `.blog-feed` of `a.blog-card` | generated from `site-config.json` when stitched: newest first, 3/6/12/all |
+| Website name | `div.editor-block.block-site-title` → `a.site-title` | header/footer only; from `siteName` |
+| Site menu | `nav.editor-block.block-menu` → `ul.site-menu` | header/footer only; pages with `showInNavbar` |
+| Embed code | `div.editor-block.block-embed` | raw HTML for helpers (see below) |
+
+Every block also carries `data-widget-type` and `data-gs-x/y/w/h` (what Pebble
+reads back) and an inline CSS Grid placement (what visitors see).
+
+### Design system (`global.css`)
+
+The exported site depends on five variables, set in Site Settings:
+
+```css
+:root {
+  --primary-color: #b85c38;   /* "Main color"  – buttons, links, current menu item */
+  --secondary-color: #6b8b4f; /* "Second color" – dates, card edges, quotes */
+  --border-radius: 14px;      /* "Roundness" */
+  --font-family: Georgia, …;  /* "Letters" – one of six safe font stacks */
+  --block-spacing: 16px;      /* "Spacing" – the gap between boxes */
+}
+```
+
+Values are validated (hex colours, clamped numbers, a fixed list of fonts), so
+nothing else can reach the CSS. In the editor the same `global.css` is built
+live, and Gridstack's margin follows `--block-spacing`, so the canvas keeps
+matching the published grid at any spacing.
+
+### For website helpers (hidden from her)
+
+- **Predictable classes.** Every block has `.editor-block` plus a
+  `.block-{type}` class with BEM-style children (table above); regions are
+  `.site-header`, `.site-main`, `.site-footer` and `.post-header`. The
+  comment at the top of `lib/site-base.css` lists them.
+- **theme.css.** Site Settings → **Advanced** (collapsed, at the very
+  bottom, with a warning) takes pasted or uploaded CSS. It's saved as
+  `theme.css`, linked after `global.css` on every page, and applied live in
+  the editor.
+- **Embed code.** The "For website helpers" group of the Add drawer has
+  **Embed code**, behind a clear warning, for maps, videos and forms. The code
+  goes into the page exactly as typed, with a base64 copy in `data-code` for
+  exact round trips. It **never runs inside the editor**: the canvas shows a
+  placeholder, and Preview is a sandboxed frame without scripts, so code can't
+  reach her login.
 
 ### `GitHubService` (`lib/github-service.js`)
 
@@ -261,84 +341,30 @@ the same code that talks to github.com, so the demo exercises the real logic.
 It reports the repository as private, so photos take the authenticated
 download path.
 
-### Two plain data shapes
+### Editor state (`editor/engine.js`)
 
 ```js
-// Page model: one page's content
-{ file: "about.html", name: "About me",
-  blocks: [ { type: "text", x: 2, y: 0, w: 8, h: 4, data: { html: "<h2>About me</h2>…" } } ] }
-
-// Site context: shared by every page (header + menu)
-{ siteName: "My Garden Diary",
-  pages: [ { file: "index.html", name: "Home" }, { file: "about.html", name: "About me" } ] }
+store = {
+  remote:    Map(path → { content, sha }),  // files in the repo (draft branch, else live)
+  livePaths: Set(paths on the live branch), // → "New" badges
+  config, docs, customCss,                  // the site being edited (see site-format.js)
+  current:   "about.html",                  // the doc on the canvas
+}
 ```
 
-`pageModelToHtml(page, site)` and `htmlToPageModel(html, file)` are pure
-functions that convert between these shapes and HTML. On top of them:
-
-- `serializeToStaticHTML()` = `pageModelToHtml(getPageModel(), siteContext())`
-- `deserializeToEditor(html)` = `loadPageModel(htmlToPageModel(html))`
-
-### What a published page looks like
-
-```html
-<header class="site-header">
-  <a class="site-name" href="index.html">My Garden Diary</a>
-  <nav class="site-nav" aria-label="Pages">
-    <a href="index.html">Home</a>
-    <a href="about.html" aria-current="page">About me</a>
-  </nav>
-</header>
-
-<main class="site-grid" data-pebble-grid data-columns="12" data-page-name="About me">
-  <section class="block block--text"
-           data-widget-type="text" data-gs-x="2" data-gs-y="6" data-gs-w="8" data-gs-h="3"
-           style="grid-column:3 / span 8;grid-row:7 / span 3">
-    <div class="block__content"><h3>Why I started this blog</h3>…</div>
-  </section>
-</main>
-```
-
-Everything the editor needs is in the HTML itself:
-
-| Information | Where it lives |
-|---|---|
-| block type and position | `data-widget-type`, `data-gs-x/y/w/h` |
-| page name | `data-page-name` on `<main>` (also used in `<title>`) |
-| site name | `.site-name` in `index.html`'s header |
-| list and order of pages | the files in the repo, ordered by `index.html`'s menu |
-
-### Multi-page state
-
-The store keeps one entry per page:
-
-```js
-{ file: "about.html",
-  remote: { html, sha } | null,  // version saved in the repo's draft (null = brand-new page)
-  draft:  "<html…>"     | null,  // edits not saved yet, kept in localStorage
-  live:   true | false }         // is the page on the live site? (false → "New" badge)
-```
-
-- **Start-up:** check whether `dev` exists and read from it (otherwise
-  `main`). List the files there and on `main` (for the "New" badges), fetch
-  `site.css` and all pages, and ask `compare` whether a saved draft is waiting
-  to go live. Then read the site name and menu order from `index.html`, put
-  back any edits kept in the browser (including unsaved new pages), and reopen
-  the last page she edited.
-- **Switching pages:** save the current page as a draft, fetch the latest copy
-  of the target page with `fetchPage()` (unless she has a draft of it: her
-  unpublished work wins), clear the canvas, and deserialize the page. A page
-  only becomes a draft if its content really differs from the repo version.
-- **Add a new page:** ask for a name, derive a safe file name ("Mes
-  Recettes!" → `mes-recettes.html`, with a suffix if it's taken), and create a
-  blank, unpublished page.
-- **Save draft:** re-render every page with the current site context and
-  commit only the files whose HTML changed to `dev`. Renaming a page,
-  renaming the site or adding a page therefore updates the menu on every page
-  automatically, while untouched pages produce no commit.
-- **Publish live:** Save draft, `compare` `main...dev` (which also catches
-  photos, and drafts saved earlier or on another computer), then merge. The
-  "Your website is live!" dialog lists the pages and the number of new photos.
+- **Start-up:** find where Pages publishes, read `dev` if it exists
+  (otherwise `main`), list the root and `blog/`, fetch every site file, and
+  build the site data from `site-config.json` and the partials (or upgrade an
+  older site). Then put back changes kept in this browser and reopen the last
+  doc.
+- **Editing:** one doc at a time on the canvas: a page, a post, or the
+  header/footer. Switching docs copies the canvas into `docs`. Every change
+  is kept in `localStorage` as data, and the sidebar dots come from comparing
+  the rendered files with `remote`.
+- **Save draft:** commit every changed file to `dev`. **Publish live:** save,
+  `compare main...dev` (which also catches photos and drafts saved elsewhere),
+  then merge. The "Your website is live!" dialog lists pages, posts,
+  "Top and bottom of your pages", "Your website’s look" and new photos.
 
 ### Free-form layout (whitespace)
 
@@ -349,21 +375,22 @@ The store keeps one entry per page:
 - **Saved file:** every block gets explicit grid lines
   (`grid-row: 11 / span 3`). CSS Grid creates the empty rows in between by
   itself, each at least one row tall.
-- **Sizes match:** the editor uses 70px rows with an 8px item margin, and
-  `site.css` uses 54px rows with a 16px gap, so a block at row *y* starts at
-  `70·y` px in both. The prototype measured the example homepage at the same
-  pixel offsets and heights in the editor and in the exported page.
+- **Sizes match:** the editor uses 70px rows with an item margin of half the
+  spacing, and `global.css` uses rows of (70px − spacing) with a gap of
+  `--block-spacing`. A block at row *y* therefore starts at `70·y` px in both,
+  at any Spacing setting.
 - **Phones:** blocks stack in reading order, and desktop whitespace is
   intentionally collapsed. A big empty gap on a small screen just looks broken.
 - Positions read from a file are clamped so a hand-edited file can't break the
   grid, but `y` is kept as written because whitespace is intended. A block
   without a position goes under the lowest block.
 
-### Widget registry
+### Adding a block type
 
-Each block type is one entry in `WIDGETS` (in `engine.js`) with five
-functions: `defaultData`, `createEditor`, `readData`, `renderStatic` and
-`parseStatic`. Adding a Video, Map or Button block means adding one entry.
+Add it in two places: its published HTML in `PebbleFormat.BLOCKS`
+(`render`, `parse`, `defaults`) and its editing UI in `EDITORS`
+(`create`, `read`, optional `settings` fields for the ⚙ dialog). The Add
+drawer, saving, stitching and round-tripping work without further changes.
 
 ### Safety
 
@@ -380,7 +407,11 @@ functions: `defaultData`, `createEditor`, `readData`, `renderStatic` and
 - The token is only ever sent to `api.github.com`; the client secret lives
   only in the worker.
 - Pebble only opens websites whose homepage it made, and never writes
-  pages it didn't make.
+  pages it didn't make. `commitFile()` only accepts Pebble's own file names
+  (pages, `blog/*.html`, `site-config.json`, `global.css`, `theme.css`).
+- Embed code is the one deliberate exception to "no raw HTML". It is
+  published as-is but never executed in the editor (placeholder on the canvas,
+  sandboxed preview without scripts).
 - Page and site names, captions and menu labels are always escaped. New page
   file names must match `^[a-z0-9][a-z0-9-]*\.html$`, which the service also
   enforces.
@@ -390,11 +421,20 @@ functions: `defaultData`, `createEditor`, `readData`, `renderStatic` and
 ```js
 Pebble.serializeToStaticHTML()       // the open page → HTML
 Pebble.deserializeToEditor(html)     // HTML → the open page
-Pebble.getPageModel()                // the open page as plain data
-Pebble.pendingChanges()              // pages Save draft would write
+Pebble.readCanvas()                  // the open page's blocks as plain data
+Pebble.buildFiles()                  // every file of the website, rendered from data
+Pebble.pendingChanges()              // the files Save draft would write
+Pebble.store                         // config, docs, remote files
 await Pebble.service.compareDraftToLive()
 await Pebble.service.listCommits('main')   // demo only: history of the fake repo
 ```
+
+## Versions
+
+- `main`: the current version, deployed by GitHub Pages.
+- `v1-stable`: the version before the header/footer, blog, component
+  library and Site Settings work (single-page format with its own header per
+  page). Websites made with it are upgraded automatically when opened.
 
 ## Next steps toward the real app
 

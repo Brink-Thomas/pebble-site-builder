@@ -202,45 +202,19 @@
     return name;
   }
 
-  const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
   /**
-   * The starter homepage, in exactly the format the editor writes
-   * (see pageModelToHtml in editor/engine.js), so a new website opens with
-   * nothing "unsaved".
+   * A new website's files, made by the same code the editor uses
+   * (lib/site-format.js), so it opens in the editor with nothing unsaved.
    */
-  function starterHomepage(title) {
-    const t = escapeHtml(title);
-    const h = String(title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="generator" content="Pebble">
-  <title>Home – ${t}</title>
-  <link rel="stylesheet" href="site.css">
-</head>
-<body>
-  <!--
-    Made with Pebble. This is plain HTML: no database, no JavaScript.
-    The data-widget-type and data-gs-* attributes let the editor re-open it.
-  -->
-  <header class="site-header">
-    <a class="site-name" href="index.html">${t}</a>
-    <nav class="site-nav" aria-label="Pages">
-      <a href="index.html" aria-current="page">Home</a>
-    </nav>
-  </header>
-
-  <main class="site-grid" data-pebble-grid data-columns="12" data-page-name="Home">
-    <section class="block block--text" data-widget-type="text" data-gs-x="0" data-gs-y="0" data-gs-w="12" data-gs-h="3" style="grid-column:1 / span 12;grid-row:1 / span 3">
-      <div class="block__content"><h2>${h}</h2><p>Welcome! This website is brand new — come back soon.</p></div>
-    </section>
-  </main>
-</body>
-</html>
-`;
+  async function starterFiles(title) {
+    const baseCss = await fetch('lib/site-base.css', { cache: 'no-cache' }).then((r) => {
+      if (!r.ok) throw new Error('base styles not found');
+      return r.text();
+    });
+    const files = PebbleFormat.buildSiteFiles(PebbleFormat.starterSite(title), { baseCss });
+    // index.html first (the repository's first real commit), then the rest.
+    const { 'index.html': home, ...rest } = files;
+    return { 'index.html': home, ...rest, '.nojekyll': '' };
   }
 
   function openCreateDialog() {
@@ -269,15 +243,10 @@
     steps.forEach((li) => li.classList.remove('is-done', 'is-active'));
 
     try {
-      // The theme comes from Pebble's own example website.
-      const css = await fetch('example-site/site.css', { cache: 'no-store' }).then((r) => {
-        if (!r.ok) throw new Error('theme not found');
-        return r.text();
-      });
       const site = await current.account.createWebsite({
         name: repoNameFor(title),
         title,
-        files: { 'index.html': starterHomepage(title), 'site.css': css, '.nojekyll': '' },
+        files: await starterFiles(title),
         onStep: (step) => {
           let reached = false;
           steps.forEach((li) => {

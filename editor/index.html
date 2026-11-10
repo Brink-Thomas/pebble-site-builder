@@ -3,59 +3,50 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pebble – Edit your page</title>
+  <title>Pebble – Edit your website</title>
 
   <!-- Gridstack: the drag-and-drop grid engine (pinned version). -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack.min.css">
-
-  <!-- editor.css only styles the editor "chrome" (toolbars, buttons, outlines). -->
+  <!-- editor.css styles the editor "chrome" only (toolbars, outlines, dialogs). -->
   <link rel="stylesheet" href="editor.css">
-
-  <!-- The website's own site.css, fetched from the user's repository at start-up
-       (see engine.js → applyTheme). Text and photos therefore look identical in
-       the editor and on the live site. Kept last so the theme wins. -->
+  <!-- The website's own design, so the canvas looks like the real site:
+       global.css (built live from Site Settings) and the optional theme.css. -->
   <style id="site-theme"></style>
+  <style id="site-custom"></style>
 </head>
 <body class="editor">
 
   <!-- ================================================================
-       TOP BAR — the only three things that matter: name, look, publish.
+       TOP BAR
        ================================================================ -->
   <header class="topbar">
-    <div class="brand" aria-label="Pebble">
-      <span class="brand__logo" aria-hidden="true">●</span> Pebble
-    </div>
-    <!-- Back to the list of her websites (the start page). -->
+    <div class="brand" aria-label="Pebble"><span class="brand__logo" aria-hidden="true">●</span> Pebble</div>
     <a class="btn btn--ghost back-link" id="btn-back" href="../">← Your websites</a>
 
+    <!-- The big friendly "+": opens the box library. -->
+    <button type="button" class="btn btn--add" id="btn-add" aria-expanded="false" aria-controls="add-drawer">
+      <span aria-hidden="true">＋</span> Add
+    </button>
+
     <label class="page-name">
-      <span class="page-name__label">Page name</span>
-      <input id="page-title" type="text" maxlength="80" placeholder="My little blog" autocomplete="off">
+      <span class="page-name__label" id="page-title-label">Page name</span>
+      <input id="page-title" type="text" maxlength="140" placeholder="Page name" autocomplete="off">
     </label>
 
     <div class="topbar__spacer"></div>
-
-    <!-- One plain sentence about where her work stands. -->
     <span id="save-status" class="save-status" role="status" aria-live="polite"></span>
 
-    <button id="btn-preview" class="btn btn--ghost" type="button">
-      <span aria-hidden="true">👀</span> Preview
-    </button>
-    <!-- Save draft: safe online, only she can see it. -->
+    <button id="btn-preview" class="btn btn--ghost" type="button"><span aria-hidden="true">👀</span> Preview</button>
+    <button id="btn-settings" class="btn btn--ghost" type="button"><span aria-hidden="true">🎨</span> Site Settings</button>
     <button id="btn-save" class="btn btn--secondary" type="button" title="Keep your changes safe. Only you can see them.">
       <span aria-hidden="true">💾</span> Save draft
     </button>
-    <!-- Publish live: everyone can see it. -->
     <button id="btn-publish" class="btn btn--publish" type="button" title="Put your changes on your website for everyone to see">
       <span aria-hidden="true">🚀</span> Publish live
     </button>
   </header>
 
-  <!-- ================================================================
-       TEXT STYLE BAR — plain-language words, not icons-only.
-       Buttons use mousedown.preventDefault() (see engine.js) so clicking
-       them never steals the cursor from the text being edited.
-       ================================================================ -->
+  <!-- Text styles (plain words, not icons-only) -->
   <div class="formatbar" id="formatbar" role="toolbar" aria-label="Text style">
     <span class="formatbar__hint">Click on any text to change how it looks →</span>
     <div class="formatbar__group">
@@ -67,54 +58,40 @@
       <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
       <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
       <button type="button" data-cmd="list" title="Bullet list">• List</button>
-      <button type="button" data-cmd="link" title="Link to another website">🔗 Link</button>
+      <button type="button" data-cmd="link" title="Link to another page or website">🔗 Link</button>
     </div>
   </div>
 
   <div class="workspace">
 
     <!-- ==============================================================
-         SIDEBAR — "Add to your page". Each tile can be dragged onto the
-         page OR simply clicked (clicking adds it at the bottom).
-         gs-w / gs-h tell Gridstack how big the new box should start.
+         SIDEBAR — the website's structure
          ============================================================== -->
     <aside class="sidebar">
-      <!-- Pages of the website, read from the repository. -->
-      <h2 class="sidebar__title">Your pages</h2>
+      <h2 class="sidebar__title">Pages</h2>
       <ul class="page-list" id="page-list" aria-label="Pages"></ul>
-      <button type="button" class="add-page" id="btn-add-page">
-        <span aria-hidden="true">＋</span> Add a new page
-      </button>
+      <button type="button" class="add-page" id="btn-add-page"><span aria-hidden="true">＋</span> Add a new page</button>
 
-      <hr class="sidebar__rule">
+      <h2 class="sidebar__title sidebar__title--spaced">Blog posts</h2>
+      <ul class="page-list" id="post-list" aria-label="Blog posts"></ul>
+      <p class="sidebar__help" id="posts-empty">No posts yet.</p>
+      <button type="button" class="add-page" id="btn-add-post"><span aria-hidden="true">＋</span> Write a blog post</button>
 
-      <h2 class="sidebar__title">Add to your page</h2>
-      <p class="sidebar__help">Drag a box onto your page, or just click it.</p>
-
-      <div class="add-tile" data-widget-type="text" gs-w="6" gs-h="3" tabindex="0" role="button">
-        <span class="add-tile__icon" aria-hidden="true">✍️</span>
-        <span class="add-tile__text"><strong>Text</strong><small>Stories, titles, lists</small></span>
-      </div>
-
-      <div class="add-tile" data-widget-type="image" gs-w="6" gs-h="5" tabindex="0" role="button">
-        <span class="add-tile__icon" aria-hidden="true">📷</span>
-        <span class="add-tile__text"><strong>Photo</strong><small>A picture from your computer</small></span>
-      </div>
+      <h2 class="sidebar__title sidebar__title--spaced">On every page</h2>
+      <ul class="page-list" id="region-list" aria-label="Parts on every page"></ul>
 
       <div class="tips">
         <h3>Good to know</h3>
         <ul>
-          <li>Hold <b>✥ Move</b> to move a box around. It stays exactly where you let go.</li>
-          <li>Pull the <b>corner</b> of a box to make it bigger or smaller.</li>
+          <li>Press <b>＋ Add</b> and drag a box onto your page.</li>
+          <li>Hold <b>✥ Move</b> to move a box. It stays where you let go.</li>
           <li><b>Save draft</b> keeps your work safe. Only you can see it.</li>
           <li><b>Publish live</b> puts it on your website for everyone.</li>
         </ul>
       </div>
 
-      <!-- Rarely needed, so tucked away. -->
       <details class="advanced">
         <summary>More options</summary>
-        <button type="button" id="btn-open-file" class="link-btn">Open a page file…</button>
         <button type="button" id="btn-download" class="link-btn">Download this page</button>
         <button type="button" id="btn-reset-demo" class="link-btn link-btn--danger">Reset the demo website</button>
         <p class="advanced__repo">Website files: <code id="repo-name">…</code></p>
@@ -122,32 +99,152 @@
     </aside>
 
     <!-- ==============================================================
-         CANVAS — a sheet of "paper" that is the same width as the live
-         site, so what she sees is what visitors get.
+         ADD DRAWER — the box library. Slides over the sidebar so the
+         page stays visible: drag a box straight onto it, or click.
+         ============================================================== -->
+    <aside class="add-drawer" id="add-drawer" hidden aria-label="Add a box">
+      <div class="add-drawer__head">
+        <h2>Add to your page</h2>
+        <button type="button" class="add-drawer__close" id="add-close" aria-label="Close">✕</button>
+      </div>
+      <p class="add-drawer__help">Drag a box onto your page, or just click it.</p>
+      <div id="add-groups"></div>
+    </aside>
+
+    <!-- ==============================================================
+         CANVAS
          ============================================================== -->
     <main class="canvas-area">
-      <div class="paper" id="paper">
-        <!-- The site header exactly as visitors see it. The site name can be
-             changed right here; menu links switch pages. -->
-        <header class="site-header">
-          <input class="site-name site-name-input" id="site-name" type="text" maxlength="60"
-                 aria-label="Website name" title="Click to change your website's name">
-          <nav class="site-nav" id="paper-nav" aria-label="Pages"></nav>
-        </header>
+      <!-- Page settings -->
+      <section class="doc-panel" id="page-panel" hidden>
+        <label class="toggle">
+          <input type="checkbox" id="page-in-menu">
+          <span class="toggle__switch" aria-hidden="true"></span>
+          Show link in website menu
+        </label>
+        <span class="doc-panel__address">Web address ends in <code id="page-address"></code></span>
+      </section>
 
-        <div class="empty-hint" aria-hidden="true">
-          <p class="empty-hint__big">This page is empty</p>
-          <p>Drag a <b>Text</b> or <b>Photo</b> box from the left and drop it anywhere.</p>
+      <!-- Blog post details -->
+      <section class="doc-panel doc-panel--post" id="post-panel" hidden>
+        <div class="doc-field">
+          <label for="post-date">Date</label>
+          <input type="date" id="post-date">
         </div>
-        <div class="grid-stack" id="canvas"></div>
+        <div class="doc-field doc-field--cover">
+          <span class="doc-field__label">Cover photo</span>
+          <div class="cover-picker">
+            <div class="cover-picker__preview" id="post-cover-preview"></div>
+            <button type="button" class="btn btn--secondary btn--small" id="post-cover">Choose a photo</button>
+            <button type="button" class="link-btn link-btn--inline" id="post-cover-remove" hidden>Remove</button>
+          </div>
+        </div>
+        <div class="doc-field doc-field--wide">
+          <label for="post-excerpt">Short summary <small>(shown on your blog page)</small></label>
+          <textarea id="post-excerpt" rows="2" maxlength="400"></textarea>
+        </div>
+      </section>
+
+      <!-- Header / footer note -->
+      <section class="doc-panel doc-panel--note" id="region-panel" hidden>
+        <span aria-hidden="true">ℹ️</span> <span id="region-panel-text"></span>
+      </section>
+
+      <div class="paper" id="paper">
+        <!-- The top of every page (click to change it) -->
+        <div class="region-preview" id="preview-header" title="Click to change the top of every page" hidden>
+          <span class="region-preview__label">✏️ Top of every page — click to change</span>
+          <div class="region-preview__content"></div>
+        </div>
+        <!-- Blog post title & date (from the post details) -->
+        <div class="post-head-preview" id="preview-post-header" hidden></div>
+
+        <div class="paper__body">
+          <div class="empty-hint" aria-hidden="true">
+            <p class="empty-hint__big">This part is empty</p>
+            <p>Press <b>＋ Add</b> and drag a box here.</p>
+          </div>
+          <div class="grid-stack" id="canvas"></div>
+        </div>
+
+        <!-- The bottom of every page -->
+        <div class="region-preview region-preview--footer" id="preview-footer" title="Click to change the bottom of every page" hidden>
+          <span class="region-preview__label">✏️ Bottom of every page — click to change</span>
+          <div class="region-preview__content"></div>
+        </div>
       </div>
     </main>
   </div>
 
   <!-- ================================================================
-       PREVIEW — shows the real exported HTML inside an iframe, at
-       computer or phone width.
+       SITE SETTINGS — the look of the whole website
        ================================================================ -->
+  <dialog id="settings-dialog" class="dialog dialog--side" aria-labelledby="settings-title">
+    <div class="dialog__bar">
+      <strong id="settings-title">🎨 Site Settings</strong>
+      <button type="button" class="btn btn--publish btn--small" data-close>Done</button>
+    </div>
+    <div class="settings-body">
+      <p class="settings-intro">Changes show up right away. They go online when you press <b>Publish live</b>.</p>
+
+      <section class="settings-section">
+        <label class="settings-label" for="set-site-name">Website name</label>
+        <input class="settings-input" id="set-site-name" type="text" maxlength="80">
+      </section>
+
+      <section class="settings-section">
+        <span class="settings-label">Main color <small>buttons, links, menu</small></span>
+        <div class="swatches" id="swatches-primary"><label class="swatch swatch--custom" title="Pick any color"><input type="color" id="set-primary" aria-label="Pick any main color">＋</label></div>
+      </section>
+
+      <section class="settings-section">
+        <span class="settings-label">Second color <small>dates, card edges, quotes</small></span>
+        <div class="swatches" id="swatches-secondary"><label class="swatch swatch--custom" title="Pick any color"><input type="color" id="set-secondary" aria-label="Pick any second color">＋</label></div>
+      </section>
+
+      <section class="settings-section">
+        <label class="settings-label" for="set-font">Letters</label>
+        <select class="settings-input" id="set-font"></select>
+      </section>
+
+      <section class="settings-section">
+        <label class="settings-label" for="set-radius">Roundness</label>
+        <input type="range" id="set-radius" min="0" max="32" step="1" class="settings-range">
+        <div class="range-labels"><span>Square</span><span>Round</span></div>
+      </section>
+
+      <section class="settings-section">
+        <label class="settings-label" for="set-spacing">Spacing</label>
+        <input type="range" id="set-spacing" min="8" max="40" step="2" class="settings-range">
+        <div class="range-labels"><span>Snug</span><span>Airy</span></div>
+      </section>
+
+      <!-- Hidden away at the very bottom: for a helper who knows CSS. -->
+      <details class="settings-advanced">
+        <summary>Advanced</summary>
+        <div class="settings-warning">
+          <strong>⚠️ For website helpers</strong>
+          <span>Extra design code (CSS) for your website, saved as <code>theme.css</code>. Mistakes here can make your website look broken. If you’re not sure, leave this empty.</span>
+        </div>
+        <textarea id="set-custom-css" class="settings-code" rows="10" spellcheck="false" placeholder=".block-card { box-shadow: none; }"></textarea>
+        <button type="button" class="btn btn--secondary btn--small" id="btn-upload-css">Upload a .css file…</button>
+      </details>
+    </div>
+  </dialog>
+
+  <!-- ⚙ Settings for one box (button link, blog feed size, embed code…) -->
+  <dialog id="block-settings" class="dialog dialog--small">
+    <form id="block-settings-form" class="settings-form" method="dialog">
+      <h2 id="block-settings-title">Settings</h2>
+      <div id="block-settings-fields"></div>
+      <div class="dialog__actions">
+        <button type="submit" value="save" class="btn btn--publish">Done</button>
+        <button type="submit" value="cancel" class="btn btn--secondary" formnovalidate>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- PREVIEW — the real stitched page. sandbox: no scripts run in it. -->
   <dialog id="preview-dialog" class="dialog dialog--preview">
     <div class="dialog__bar">
       <strong>This is how visitors will see your page</strong>
@@ -158,30 +255,22 @@
       <button type="button" class="btn btn--secondary" data-close>Back to editing</button>
     </div>
     <div class="preview-stage">
-      <iframe id="preview-frame" title="Page preview" class="preview-frame"></iframe>
+      <iframe id="preview-frame" title="Page preview" class="preview-frame" sandbox="allow-same-origin allow-popups"></iframe>
     </div>
   </dialog>
 
-  <!-- ================================================================
-       PUBLISH — friendly confirmation. (Prototype: HTML goes to console.)
-       ================================================================ -->
   <dialog id="publish-dialog" class="dialog dialog--small">
     <div class="publish-done">
       <div class="publish-done__icon" aria-hidden="true">🎉</div>
       <h2>Your website is live!</h2>
       <p>Everyone can now see:</p>
       <ul class="publish-done__list" id="publish-list"></ul>
-      <p>Visit it at <a id="publish-url" target="_blank" rel="noopener"></a>.
-         It can take a minute or two to show up.</p>
+      <p>Visit it at <a id="publish-url" target="_blank" rel="noopener"></a>. It can take a minute or two to show up.</p>
       <p class="publish-done__dev" id="publish-demo-note">This is a demo, so nothing was really put online.</p>
       <button type="button" class="btn btn--publish" data-close>Wonderful</button>
     </div>
   </dialog>
 
-  <!-- ================================================================
-       CHANGED ELSEWHERE — the live site was edited somewhere else in a
-       way that clashes with her draft. Plain words, one clear choice.
-       ================================================================ -->
   <dialog id="conflict-dialog" class="dialog dialog--small">
     <form method="dialog" class="publish-done">
       <div class="publish-done__icon" aria-hidden="true">🤔</div>
@@ -195,28 +284,21 @@
     </form>
   </dialog>
 
-  <!-- ================================================================
-       ADD A NEW PAGE — asks for a name; the file name is made from it.
-       ================================================================ -->
+  <!-- New page / new blog post -->
   <dialog id="newpage-dialog" class="dialog dialog--small">
     <form method="dialog" class="newpage-form">
-      <h2>Add a new page</h2>
-      <label class="newpage-form__label" for="newpage-name">What should the page be called?</label>
-      <input id="newpage-name" class="newpage-form__input" type="text" maxlength="40" required
-             placeholder="For example: My recipes" autocomplete="off">
+      <h2 id="newpage-heading">Add a new page</h2>
+      <label class="newpage-form__label" for="newpage-name" id="newpage-label">What should the page be called?</label>
+      <input id="newpage-name" class="newpage-form__input" type="text" maxlength="140" required autocomplete="off">
       <p class="newpage-form__address">Its web address will end in <code id="newpage-file">…</code></p>
-      <!-- "Create" is first in the markup so pressing Enter creates the page. -->
       <div class="dialog__actions">
-        <button type="submit" value="create" class="btn btn--publish">Create page</button>
+        <button type="submit" value="create" class="btn btn--publish" id="newpage-create">Create page</button>
         <button type="submit" value="cancel" class="btn btn--secondary" formnovalidate>Cancel</button>
       </div>
     </form>
   </dialog>
 
-  <!-- ================================================================
-       PHOTO LIBRARY — every photo she has uploaded, as big thumbnails.
-       Upload a new one at the top, or click any photo to use it.
-       ================================================================ -->
+  <!-- Photo library -->
   <dialog id="media-dialog" class="dialog dialog--media" aria-labelledby="media-title">
     <div class="dialog__bar">
       <strong id="media-title">Choose a photo</strong>
@@ -231,14 +313,12 @@
         </div>
         <button type="button" class="btn btn--publish" id="media-upload-btn">Choose a photo…</button>
       </div>
-
       <h3 class="media-heading">Your photos</h3>
       <p class="media-status" id="media-status" role="status" aria-live="polite"></p>
       <div class="media-grid" id="media-grid"></div>
     </div>
   </dialog>
 
-  <!-- Covers the editor while a page is being fetched from the repository. -->
   <div id="loading" class="loading" role="status" aria-live="polite" hidden>
     <div class="loading__card">
       <span class="spinner" aria-hidden="true"></span>
@@ -247,19 +327,18 @@
     </div>
   </div>
 
-  <!-- Small message at the bottom of the screen ("Box removed — Undo"). -->
   <div id="toast" class="toast" role="status" aria-live="polite" hidden>
     <span class="toast__msg"></span>
     <button type="button" class="toast__action" hidden></button>
   </div>
 
-  <!-- Hidden file pickers, opened from buttons. -->
   <input type="file" id="file-image" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif" hidden>
-  <input type="file" id="file-page" accept=".html,.htm,text/html" hidden>
+  <input type="file" id="file-css" accept=".css,text/css" hidden>
 
   <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.js"></script>
   <script src="../lib/config.js"></script>
   <script src="../lib/auth.js"></script>
+  <script src="../lib/site-format.js"></script>
   <script src="../lib/github-service.js"></script>
   <script src="engine.js"></script>
 </body>
