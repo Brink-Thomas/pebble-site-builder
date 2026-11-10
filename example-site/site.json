@@ -1,0 +1,612 @@
+{
+  "generator": "Pebble",
+  "version": 5,
+  "settings": {
+    "siteName": "My Garden Diary",
+    "theme": {
+      "primaryColor": "#b85c38",
+      "secondaryColor": "#6b8b4f",
+      "fontFamily": "classic",
+      "borderRadius": 14,
+      "blockSpacing": 16
+    },
+    "typography": {
+      "styles": {
+        "title": {
+          "name": "Main Heading",
+          "font": "",
+          "size": 48,
+          "lineHeight": 1.15,
+          "weight": 700
+        },
+        "heading": {
+          "name": "Heading",
+          "font": "",
+          "size": 36,
+          "lineHeight": 1.2,
+          "weight": 600
+        },
+        "subheading": {
+          "name": "Subheading",
+          "font": "",
+          "size": 24,
+          "lineHeight": 1.3,
+          "weight": 600
+        },
+        "paragraph": {
+          "name": "Paragraph",
+          "font": "",
+          "size": 18,
+          "lineHeight": 1.65,
+          "weight": 400
+        },
+        "small": {
+          "name": "Small text",
+          "font": "",
+          "size": 14,
+          "lineHeight": 1.5,
+          "weight": 400
+        }
+      }
+    },
+    "branding": {
+      "logo": "",
+      "logoHeight": 44,
+      "logoMode": "logo-name",
+      "favicon": ""
+    },
+    "hero": {
+      "enabled": false,
+      "src": "",
+      "position": "below",
+      "size": "medium"
+    },
+    "customCss": ""
+  },
+  "blogPage": "blog.html",
+  "pages": [
+    {
+      "id": "p_3z316a16",
+      "file": "index.html",
+      "title": "Home",
+      "showInNavbar": true,
+      "sections": [
+        {
+          "id": "s_elde056h",
+          "style": {
+            "bgColor": "",
+            "bgImage": "",
+            "overlayColor": "#000000",
+            "overlayOpacity": 0,
+            "tone": "dark",
+            "valign": "top"
+          },
+          "columns": [
+            {
+              "id": "c_sf3xow14",
+              "width": 100,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_tbraqn1k",
+                  "type": "text",
+                  "data": {
+                    "html": "<h2>Welcome to my garden diary</h2><p>Hello, and thank you for stopping by! This is where I write about my little vegetable patch, my roses, and everything I learn along the way.</p>"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "s_1f0ez7f1",
+          "style": {
+            "bgColor": "",
+            "bgImage": "",
+            "overlayColor": "#000000",
+            "overlayOpacity": 0,
+            "tone": "dark",
+            "valign": "top"
+          },
+          "columns": [
+            {
+              "id": "c_35k13a13",
+              "width": 70,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_yg2wpfr2",
+                  "type": "image",
+                  "data": {
+                    "src": "assets/images/garden-sunset.svg",
+                    "caption": "The garden at sunset",
+                    "alt": "",
+                    "href": "",
+                    "radius": "",
+                    "ratio": "auto"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "c_1riidi08",
+              "width": 30,
+              "style": {
+                "bgColor": "#efe7db"
+              },
+              "blocks": [
+                {
+                  "id": "b_fmylr211",
+                  "type": "text",
+                  "data": {
+                    "html": "<h3>What I grow</h3><p>I'm not an expert — just curious and happy to share what works (and what doesn't).</p><ul><li>Tomatoes (far too many)</li><li>Courgettes and beans</li><li>Old English roses</li></ul>"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "s_1caqq181",
+          "style": {
+            "bgColor": "#6b8b4f",
+            "bgImage": "",
+            "overlayColor": "#000000",
+            "overlayOpacity": 0,
+            "tone": "light",
+            "valign": "center"
+          },
+          "columns": [
+            {
+              "id": "c_1mfgcr9p",
+              "width": 67,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_1us7s7a1",
+                  "type": "text",
+                  "data": {
+                    "html": "<h3>Latest from the garden</h3>"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "c_j0iwdnez",
+              "width": 33,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_1q6frzg5",
+                  "type": "button",
+                  "data": {
+                    "label": "All blog posts",
+                    "href": "blog.html",
+                    "style": "secondary",
+                    "align": "right"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "s_rcn64612",
+          "style": {
+            "bgColor": "#6b8b4f",
+            "bgImage": "",
+            "overlayColor": "#000000",
+            "overlayOpacity": 0,
+            "tone": "light",
+            "valign": "top"
+          },
+          "columns": [
+            {
+              "id": "c_brj9021v",
+              "width": 100,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_ow1lh2lv",
+                  "type": "blog-feed",
+                  "data": {
+                    "limit": 3
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p_448aah1f",
+      "file": "about.html",
+      "title": "About me",
+      "showInNavbar": true,
+      "sections": [
+        {
+          "id": "s_ubssjw1j",
+          "style": {
+            "bgColor": "",
+            "bgImage": "",
+            "overlayColor": "#000000",
+            "overlayOpacity": 0,
+            "tone": "dark",
+            "valign": "top"
+          },
+          "columns": [
+            {
+              "id": "c_gymus41l",
+              "width": 100,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_1wyw43n1",
+                  "type": "text",
+                  "data": {
+                    "html": "<h2>About me</h2><p>I'm a mother of three who finally has time for the garden. For years I only had a few pots on the balcony; now I have a real patch of soil and far too many seed packets.</p><p>I live in a small village with clay soil, cold springs and a lot of slugs.</p>"
+                  }
+                },
+                {
+                  "id": "b_bjn98w16",
+                  "type": "text",
+                  "data": {
+                    "html": "<h3>Why I started this blog</h3><p>Mostly to remember what I planted where! But also because the best tips I ever got came from neighbours over the fence. This is my fence.</p>"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "s_1uheu8uo",
+          "style": {
+            "bgColor": "",
+            "bgImage": "",
+            "overlayColor": "#000000",
+            "overlayOpacity": 0,
+            "tone": "dark",
+            "valign": "top"
+          },
+          "columns": [
+            {
+              "id": "c_vgrxzimw",
+              "width": 50,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_1jxgr2o1",
+                  "type": "card",
+                  "data": {
+                    "src": "assets/images/tomatoes.svg",
+                    "title": "The vegetable patch",
+                    "html": "<p>Tomatoes, courgettes and far too many beans.</p>",
+                    "href": "blog/starting-from-seed.html",
+                    "linkLabel": "Read the story",
+                    "bg": "",
+                    "textColor": "",
+                    "border": "accent"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "c_1wfg34m1",
+              "width": 50,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_1q41z6h1",
+                  "type": "card",
+                  "data": {
+                    "src": "assets/images/roses.svg",
+                    "title": "The roses",
+                    "html": "<p>Old English roses along the fence.</p>",
+                    "href": "blog/roses-in-november.html",
+                    "linkLabel": "See them",
+                    "bg": "",
+                    "textColor": "",
+                    "border": "accent"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p_1um07ai5",
+      "file": "blog.html",
+      "title": "Blog",
+      "showInNavbar": true,
+      "sections": [
+        {
+          "id": "s_14ntpmw9",
+          "style": {
+            "bgColor": "",
+            "bgImage": "",
+            "overlayColor": "#000000",
+            "overlayOpacity": 0,
+            "tone": "dark",
+            "valign": "top"
+          },
+          "columns": [
+            {
+              "id": "c_1qznewg1",
+              "width": 100,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_o1le67le",
+                  "type": "text",
+                  "data": {
+                    "html": "<h2>Blog</h2><p>Stories from the garden, newest first.</p>"
+                  }
+                },
+                {
+                  "id": "b_15ku9iid",
+                  "type": "blog-feed",
+                  "data": {
+                    "limit": 0
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p_189hhjo1",
+      "file": "contact.html",
+      "title": "Contact",
+      "showInNavbar": true,
+      "sections": [
+        {
+          "id": "s_dp58ox1n",
+          "style": {
+            "bgColor": "",
+            "bgImage": "",
+            "overlayColor": "#000000",
+            "overlayOpacity": 0,
+            "tone": "dark",
+            "valign": "top"
+          },
+          "columns": [
+            {
+              "id": "c_1u9c8l52",
+              "width": 100,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_qz1t8a1k",
+                  "type": "text",
+                  "data": {
+                    "html": "<h2>Say hello</h2><p>I love hearing from other gardeners. Send me an email at <a href=\"mailto:hello@example.com\">hello@example.com</a> and I'll write back as soon as the weeding is done.</p>"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "posts": [
+    {
+      "id": "p_121cd581",
+      "file": "blog/starting-from-seed.html",
+      "title": "Starting from seed",
+      "date": "2026-11-02",
+      "thumbnail": "assets/images/tomatoes.svg",
+      "excerpt": "This spring I tried growing everything from seed on the kitchen windowsill. Some things worked beautifully, others… not so much. Tomatoes: every single seed…",
+      "excerptAuto": true,
+      "sections": [
+        {
+          "id": "s_4z7p8y1v",
+          "style": {
+            "bgColor": "",
+            "bgImage": "",
+            "overlayColor": "#000000",
+            "overlayOpacity": 0,
+            "tone": "dark",
+            "valign": "top"
+          },
+          "columns": [
+            {
+              "id": "c_11l2evg1",
+              "width": 67,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_6g8lou33",
+                  "type": "text",
+                  "data": {
+                    "html": "<p>This spring I tried growing everything from seed on the kitchen windowsill. Some things worked beautifully, others… not so much.</p><h3>What worked</h3><ul><li>Tomatoes: every single seed came up</li><li>Basil, once it was warm enough</li></ul><h3>What didn't</h3><p>Courgettes hate being moved. Next year they go straight into the ground.</p>"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "c_1wxmj611",
+              "width": 33,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_1exc6891",
+                  "type": "image",
+                  "data": {
+                    "src": "assets/images/tomatoes.svg",
+                    "caption": "The first tomatoes of the year",
+                    "alt": "",
+                    "href": "",
+                    "radius": "",
+                    "ratio": "auto"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p_3zl5rn1m",
+      "file": "blog/roses-in-november.html",
+      "title": "Roses in November",
+      "date": "2026-11-08",
+      "thumbnail": "assets/images/roses.svg",
+      "excerpt": "Who would have thought: the roses are still flowering in November. The mild autumn kept them going, and the last buds are opening along the fence. Time to…",
+      "excerptAuto": true,
+      "sections": [
+        {
+          "id": "s_1xd55cj2",
+          "style": {
+            "bgColor": "",
+            "bgImage": "",
+            "overlayColor": "#000000",
+            "overlayOpacity": 0,
+            "tone": "dark",
+            "valign": "top"
+          },
+          "columns": [
+            {
+              "id": "c_199g96z1",
+              "width": 100,
+              "style": {
+                "bgColor": ""
+              },
+              "blocks": [
+                {
+                  "id": "b_l5chun1x",
+                  "type": "text",
+                  "data": {
+                    "html": "<p>Who would have thought: the roses are still flowering in November. The mild autumn kept them going, and the last buds are opening along the fence.</p><p>Time to prune soon — but not before I have enjoyed them a little longer.</p>"
+                  }
+                },
+                {
+                  "id": "b_og3at5as",
+                  "type": "image",
+                  "data": {
+                    "src": "assets/images/roses.svg",
+                    "caption": "Still flowering in November",
+                    "alt": "",
+                    "href": "",
+                    "radius": "",
+                    "ratio": "auto"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "header": {
+    "sections": [
+      {
+        "id": "s_1s5ty5k1",
+        "style": {
+          "bgColor": "",
+          "bgImage": "",
+          "overlayColor": "#000000",
+          "overlayOpacity": 0,
+          "tone": "dark",
+          "valign": "center"
+        },
+        "columns": [
+          {
+            "id": "c_au9rvsow",
+            "width": 42,
+            "style": {
+              "bgColor": ""
+            },
+            "blocks": [
+              {
+                "id": "b_1rqvkrz1",
+                "type": "site-title",
+                "data": {}
+              }
+            ]
+          },
+          {
+            "id": "c_rqieoibs",
+            "width": 58,
+            "style": {
+              "bgColor": ""
+            },
+            "blocks": [
+              {
+                "id": "b_1vigvwm9",
+                "type": "menu",
+                "data": {
+                  "align": "right"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "sections": [
+      {
+        "id": "s_81qvb8i0",
+        "style": {
+          "bgColor": "",
+          "bgImage": "",
+          "overlayColor": "#000000",
+          "overlayOpacity": 0,
+          "tone": "dark",
+          "valign": "top"
+        },
+        "columns": [
+          {
+            "id": "c_1li88bc1",
+            "width": 100,
+            "style": {
+              "bgColor": ""
+            },
+            "blocks": [
+              {
+                "id": "b_1ori8xa1",
+                "type": "text",
+                "data": {
+                  "html": "<p>© 2026 My Garden Diary · Made with Pebble</p>"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

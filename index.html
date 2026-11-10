@@ -10,78 +10,73 @@
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="./"><span class="brand__logo" aria-hidden="true">●</span> Pebble</a>
-    <div class="top__spacer"></div>
+    <a class="brand" href="./"><span class="brand__mark" aria-hidden="true"></span><span>Pebble</span></a>
     <div class="account" id="account" hidden>
-      <img class="account__avatar" id="account-avatar" alt="" width="36" height="36">
+      <img class="account__avatar" id="account-avatar" alt="" width="28" height="28">
       <span class="account__name" id="account-name"></span>
-      <button type="button" class="btn btn--quiet" id="btn-signout">Sign out</button>
+      <button type="button" class="btn btn--quiet btn--small" id="btn-signout"><span data-icon="log-out"></span><span>Sign out</span></button>
     </div>
   </header>
 
   <main class="page">
 
     <!-- ============================================================
-         WELCOME — not signed in yet
+         SIGN IN — a single centred card
          ============================================================ -->
-    <section class="screen" id="screen-welcome" hidden>
-      <div class="notice" id="welcome-notice" role="alert" hidden></div>
-
-      <div class="hero">
-        <h1>Your own website, made simple.</h1>
-        <p class="hero__lead">Write your stories, add your photos, and press Publish. No technical skills needed.</p>
-      </div>
-
-      <div class="connect-card">
-        <h2>Connect your hosting account</h2>
-        <p>Pebble keeps your website online for free with <strong>GitHub</strong>, a well-known hosting service.
-           If you don't have an account yet, you can make one in the next step.</p>
-        <button type="button" class="btn btn--github" id="btn-connect">
-          <svg class="github-mark" viewBox="0 0 16 16" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          Connect your Hosting Account (GitHub)
+    <section class="screen screen--center" id="screen-welcome" hidden>
+      <div class="login">
+        <div class="notice notice--error" id="welcome-notice" role="alert" hidden></div>
+        <span class="login__mark" aria-hidden="true"></span>
+        <h1 class="login__title">Your own website, made simple.</h1>
+        <p class="login__lead">Write your stories, add your photos and press Publish. Pebble keeps your website online for free with GitHub.</p>
+        <button type="button" class="btn btn--github btn--wide" id="btn-connect">
+          <svg class="github-mark" viewBox="0 0 16 16" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span>Connect GitHub</span>
         </button>
-        <p class="connect-card__fine">GitHub will ask whether Pebble may update your websites.
-           Pebble only ever changes a website when you open it here and press Save or Publish.</p>
-        <p class="connect-card__setup" id="not-configured" hidden>
-          Signing in isn't set up on this copy of Pebble yet. (Website owner: fill in <code>lib/config.js</code>, see the README.)
-        </p>
+        <p class="login__fine">No account yet? You can make one in the next step. Pebble only changes a website when you open it here and press Save or Publish.</p>
+        <p class="login__setup" id="not-configured" hidden>Signing in isn't set up on this copy of Pebble yet. (Website owner: fill in <code>lib/config.js</code>, see the README.)</p>
+        <div class="login__divider"><span>or</span></div>
+        <a class="btn btn--quiet btn--wide" href="?demo=1"><span data-icon="play"></span><span>Try a practice website first</span></a>
       </div>
-
-      <p class="try-it"><a href="?demo=1">Just looking? Try a practice website first →</a></p>
     </section>
 
     <!-- ============================================================
          BUSY — connecting / loading
          ============================================================ -->
     <section class="screen screen--center" id="screen-busy" hidden>
-      <span class="spinner" aria-hidden="true"></span>
-      <p id="busy-message" role="status">One moment…</p>
+      <div class="busy"><span class="spinner" aria-hidden="true"></span><p id="busy-message" role="status">One moment…</p></div>
     </section>
 
     <!-- ============================================================
-         YOUR WEBSITES — signed in (or practice mode)
+         YOUR WEBSITES
          ============================================================ -->
     <section class="screen" id="screen-sites" hidden>
       <div class="notice notice--practice" id="practice-banner" hidden>
+        <span data-icon="flask-conical"></span>
         <span><strong>Practice mode.</strong> Nothing you do here goes online, so feel free to experiment.</span>
-        <a class="btn btn--github btn--small" href="./">Connect your hosting account</a>
+        <a class="btn btn--github btn--small" href="./">Connect GitHub</a>
       </div>
 
-      <h1 id="hello">Hello!</h1>
-      <p class="lead">Which website would you like to work on?</p>
+      <div class="sites-head">
+        <div>
+          <h1 id="hello">Hello!</h1>
+          <p class="lead">Which website would you like to work on?</p>
+        </div>
+        <button type="button" class="btn btn--primary" data-create><span data-icon="plus"></span><span>Create New Site</span></button>
+      </div>
 
-      <h2 class="section-title">Your websites</h2>
       <p class="sites-status" id="sites-status" role="status" hidden></p>
       <div class="site-grid" id="site-grid"></div>
 
       <div class="empty" id="sites-empty" hidden>
+        <span data-icon="layout-template" class="empty__icon"></span>
         <p class="empty__big">You don't have a Pebble website yet.</p>
         <p>Let's make your first one — it only takes a minute.</p>
-        <button type="button" class="btn btn--primary" data-create>+ Create my first website</button>
+        <button type="button" class="btn btn--primary" data-create><span data-icon="plus"></span><span>Create my first website</span></button>
       </div>
 
       <details class="other-sites" id="other-sites" hidden>
-        <summary>Other websites in your account (<span id="other-count">0</span>)</summary>
+        <summary><span data-icon="chevron-right" class="other-sites__chev"></span>Other websites in your account (<span id="other-count">0</span>)</summary>
         <p class="other-sites__note">These websites were made another way, so Pebble leaves them alone and won't change them.</p>
         <div class="site-grid site-grid--muted" id="other-grid"></div>
       </details>
@@ -117,9 +112,12 @@
     </div>
   </dialog>
 
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
   <script src="lib/config.js"></script>
   <script src="lib/auth.js"></script>
-  <script src="lib/site-format.js"></script>
+  <script src="lib/design.js"></script>
+  <script src="lib/site-state.js"></script>
+  <script src="lib/compiler.js"></script>
   <script src="lib/github-service.js"></script>
   <script src="dashboard/dashboard.js"></script>
 </body>

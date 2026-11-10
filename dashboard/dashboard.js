@@ -11,6 +11,15 @@
   const $ = (sel) => document.querySelector(sel);
   const params = new URLSearchParams(location.search);
 
+  /** A Lucide icon as SVG markup (the same icon set as the editor). */
+  function icon(name) {
+    const pascal = name.replace(/(^|-)([a-z0-9])/g, (_m, _d, c) => c.toUpperCase());
+    const node = window.lucide && window.lucide.icons[pascal];
+    return node ? window.lucide.createElement(node).outerHTML.replace(/class="[^"]*"/, 'class="icon"').replace('stroke-width="2"', 'stroke-width="1.75"') : '';
+  }
+  /** Fill every <span data-icon="name"> on the page. */
+  const drawIcons = (root = document) => root.querySelectorAll('[data-icon]:empty').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
+
   function show(screen) {
     for (const id of ['welcome', 'busy', 'sites']) $(`#screen-${id}`).hidden = id !== screen;
   }
@@ -118,7 +127,7 @@
     if (ready) {
       const cta = document.createElement('span');
       cta.className = 'site-card__cta';
-      cta.textContent = 'Edit website →';
+      cta.innerHTML = `<span>Edit website</span>${icon('arrow-right')}`;
       card.appendChild(cta);
     }
     return card;
@@ -128,6 +137,7 @@
     show('sites');
     const isDemo = account.isDemo;
     $('#practice-banner').hidden = !isDemo;
+    document.querySelectorAll('[data-create]').forEach((b) => { b.hidden = isDemo; }); // one practice website only
     $('#hello').textContent = isDemo ? 'Welcome!' : `Hello, ${String(person.name).split(' ')[0]}!`;
 
     if (!isDemo) {
@@ -189,7 +199,7 @@
     btn.type = 'button';
     btn.className = 'site-card site-card--new';
     btn.dataset.create = '';
-    btn.innerHTML = '<span class="site-card--new__plus" aria-hidden="true">+</span><span>Create a new website</span>';
+    btn.innerHTML = `${icon('plus')}<span>Create a new website</span>`;
     return btn;
   }
 
@@ -203,15 +213,16 @@
   }
 
   /**
-   * A new website's files, made by the same code the editor uses
-   * (lib/site-format.js), so it opens in the editor with nothing unsaved.
+   * A new website's files: a starter site.json, compiled by the same code
+   * the editor uses (lib/site-state.js + lib/compiler.js), so it opens in
+   * the editor with nothing unsaved.
    */
   async function starterFiles(title) {
     const baseCss = await fetch('lib/site-base.css', { cache: 'no-cache' }).then((r) => {
       if (!r.ok) throw new Error('base styles not found');
       return r.text();
     });
-    const files = PebbleFormat.buildSiteFiles(PebbleFormat.starterSite(title), { baseCss });
+    const files = PebbleCompiler.compileSite(PebbleState.createSite(title), { baseCss });
     // index.html first (the repository's first real commit), then the rest.
     const { 'index.html': home, ...rest } = files;
     return { 'index.html': home, ...rest, '.nojekyll': '' };
@@ -325,5 +336,6 @@
     showSites(account, session);
   }
 
+  drawIcons();
   start();
 })();

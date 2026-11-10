@@ -8,41 +8,46 @@
   <link rel="stylesheet" href="global.css">
 </head>
 <body class="is-page">
-  <!--
-    Made with Pebble: plain HTML, no database, no JavaScript.
-    The header and footer come from header.html / footer.html, menu and blog
-    posts from site-config.json. data-pebble-* / data-gs-* let Pebble re-open it.
-  -->
-  <header class="site-header" data-pebble-region="header">
-    <div class="region-grid" data-columns="12">
-      <div class="editor-block block-site-title" data-widget-type="site-title" data-gs-x="0" data-gs-y="0" data-gs-w="5" data-gs-h="1" style="grid-column:1 / span 5;grid-row:1 / span 1">
-        <a class="site-title" href="index.html"><span class="site-title__name">My Garden Diary</span></a>
+  <!-- Made with Pebble. Pebble edits site.json and rewrites this file from it. -->
+  <header class="site-header">
+    <section class="page-section">
+      <div class="section-columns section-columns--center" style="--columns:42fr 58fr">
+        <div class="section-column">
+          <div class="block block-site-title">
+            <a class="site-title" href="index.html"><span class="site-title__name">My Garden Diary</span></a>
+          </div>
+        </div>
+        <div class="section-column">
+          <nav class="block block-menu block-menu--right" aria-label="Site menu">
+            <input class="site-menu__toggle" type="checkbox" id="site-menu-1" aria-label="Open the menu"><label class="site-menu__burger" for="site-menu-1" aria-hidden="true"><span></span><span></span><span></span></label><ul class="site-menu"><li><a href="index.html">Home</a></li><li><a href="about.html">About me</a></li><li><a href="blog.html">Blog</a></li><li><a href="contact.html" aria-current="page">Contact</a></li></ul>
+          </nav>
+        </div>
       </div>
-
-      <nav class="editor-block block-menu block-menu--right" data-widget-type="menu" data-gs-x="5" data-gs-y="0" data-gs-w="7" data-gs-h="1" aria-label="Site menu" style="grid-column:6 / span 7;grid-row:1 / span 1">
-        <input class="site-menu__toggle" type="checkbox" id="site-menu-5-0" aria-label="Open the menu"><label class="site-menu__burger" for="site-menu-5-0" aria-hidden="true"><span></span><span></span><span></span></label><ul class="site-menu"><li><a href="index.html">Home</a></li><li><a href="about.html">About me</a></li><li><a href="blog.html">Blog</a></li><li><a href="contact.html" aria-current="page">Contact</a></li></ul>
-      </nav>
-    </div>
+    </section>
   </header>
 
-  <main class="site-main" id="main" data-pebble-page data-page-name="Contact">
-    <div class="section-row section-row--full" data-pebble-row>
-      <section class="page-section" data-pebble-section data-width="100">
-        <div class="region-grid section-grid" data-pebble-grid data-columns="12">
-          <section class="editor-block block-text" data-widget-type="text" data-gs-x="3" data-gs-y="1" data-gs-w="6" data-gs-h="3" style="grid-column:4 / span 6;grid-row:2 / span 3">
+  <main class="site-main" id="main">
+    <section class="page-section">
+      <div class="section-columns">
+        <div class="section-column">
+          <section class="block block-text">
             <div class="block-text__content rich-text"><h2>Say hello</h2><p>I love hearing from other gardeners. Send me an email at <a href="mailto:hello@example.com">hello@example.com</a> and I'll write back as soon as the weeding is done.</p></div>
           </section>
         </div>
-      </section>
-    </div>
+      </div>
+    </section>
   </main>
 
-  <footer class="site-footer" data-pebble-region="footer">
-    <div class="region-grid" data-columns="12">
-      <section class="editor-block block-text" data-widget-type="text" data-gs-x="0" data-gs-y="0" data-gs-w="12" data-gs-h="1" style="grid-column:1 / span 12;grid-row:1 / span 1">
-        <div class="block-text__content rich-text"><p>© 2026 My Garden Diary · Made with Pebble</p></div>
-      </section>
-    </div>
+  <footer class="site-footer">
+    <section class="page-section">
+      <div class="section-columns">
+        <div class="section-column">
+          <section class="block block-text">
+            <div class="block-text__content rich-text"><p>© 2026 My Garden Diary · Made with Pebble</p></div>
+          </section>
+        </div>
+      </div>
+    </section>
   </footer>
 </body>
 </html>

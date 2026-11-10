@@ -6,15 +6,16 @@
    roundness in Site Settings restyles the whole website.
 
    DEVELOPERS: don't edit global.css (Pebble rewrites it). Put your own rules
-   in theme.css (Site Settings → Advanced); it loads after this file. Every
-   block has a stable class you can target:
+   in theme.css (Site Settings → Advanced); it loads after this file. The
+   markup is plain and stable:
 
-     .editor-block                 every block
-     .block-text  .block-image  .block-card(--outline|--shadow|--none)  .block-button
-     .block-blog-feed  .block-embed  .block-site-title  .block-menu
-     .site-header(--hero)  .site-hero  .site-footer  .site-main  .post-header  .region-grid
+     .site-header(--hero)  .site-hero  .site-main  .site-footer  .post-header
+     section.page-section(--filled|--light)  .page-section__bg  .page-section__overlay
+       .section-columns(--center|--bottom)  [--columns: 70fr 30fr]
+         .section-column(--filled)           [--column-bg]
+           .block  .block-text  .block-image(--cropped)  .block-card(--outline|--shadow|--none)
+           .block-button  .block-blog-feed  .block-embed  .block-site-title  .block-menu
      .rich-text h1/h2/h3/p/.text-small  .align-*  mark.hl-*
-     .section-row(--full|--split)  .page-section(--filled|--light)  .page-section__bg  .page-section__overlay
      .site-title__logo  .site-title__name  .site-menu__burger
 
    Design variables (from Site Settings): --primary-color --secondary-color
@@ -30,8 +31,6 @@
   --soft-color: #efe7db;
   --line-color: #e5ddd1;
 
-  /* Grid — must match the editor: one row = 70px including spacing. */
-  --row-height: 70px;
   --page-width: 1100px;
 }
 
@@ -50,43 +49,40 @@ body {
 
 img { max-width: 100%; }
 
-/* ---------- The grid every region uses (header, page, footer) ----------
-   Blocks are placed on explicit grid lines (grid-row: 10 / span 3), so empty
-   rows — free-form whitespace from the editor — are kept. A row is at least
-   (70px − spacing) tall and grows if the content needs more room. */
+/* ---------- Sections and columns ----------
+   A page is a stack of sections. A section's background runs edge to edge;
+   its columns sit side by side inside the page width (--columns: 70fr 30fr)
+   and blocks stack top to bottom inside a column. */
 
-.region-grid {
-  max-width: var(--page-width);
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-auto-rows: minmax(calc(var(--row-height) - var(--block-spacing)), auto);
-  gap: var(--block-spacing);
-  padding: 0 calc(var(--block-spacing) + 8px);
-}
+.block { margin: 0; min-width: 0; }
 
-.editor-block { margin: 0; min-width: 0; }
-
-/* ---------- Header, main, footer ---------- */
-
-.site-header { padding: 22px 0; border-bottom: 1px solid var(--line-color); }
+.site-header { position: relative; border-bottom: 1px solid var(--line-color); }
 .site-main { padding: 0 0 48px; }
+.site-footer { border-top: 1px solid var(--line-color); color: var(--muted-color); font-size: 0.95rem; }
 
-/* ---------- Sections: rows of 1–3 sections, each with its own grid ----------
-   One section in a row: its background runs edge to edge, content stays
-   centred. Two or three: they sit side by side (--row-columns: 70fr 30fr). */
-.section-row { display: grid; grid-template-columns: var(--row-columns, 1fr); gap: var(--block-spacing); }
-.section-row--split { max-width: var(--page-width); margin: 0 auto; padding: calc(var(--block-spacing) * 1.5) calc(var(--block-spacing) + 8px); }
-.page-section { position: relative; min-width: 0; background: var(--section-bg, transparent); }
-.section-row--full .page-section { padding: calc(var(--block-spacing) * 2.5) 0; }
-.section-row--split .page-section { padding: 0; }
-.section-row--split .page-section--filled { padding: calc(var(--block-spacing) * 1.5) 0; border-radius: var(--border-radius); overflow: hidden; }
-.section-row--split .page-section .section-grid { padding: 0 var(--block-spacing); }
-.section-row--split .page-section:not(.page-section--filled) .section-grid { padding: 0; }
+.page-section { position: relative; background: var(--section-bg, transparent); padding: calc(var(--block-spacing) * 2.5) 0; }
+.site-header .page-section { padding: 18px 0; }
+.site-footer .page-section { padding: 26px 0 32px; }
 .page-section__bg { position: absolute; inset: 0; z-index: 0; }
 .page-section__bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .page-section__overlay { position: absolute; inset: 0; z-index: 0; }
-.page-section .section-grid { position: relative; z-index: 1; }
+
+.section-columns {
+  position: relative;
+  z-index: 1;
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 0 calc(var(--block-spacing) + 8px);
+  display: grid;
+  grid-template-columns: var(--columns, minmax(0, 1fr));
+  gap: calc(var(--block-spacing) * 2);
+  align-items: start;
+}
+.section-columns--center { align-items: center; }
+.section-columns--bottom { align-items: end; }
+.section-column { min-width: 0; display: flex; flex-direction: column; gap: var(--block-spacing); }
+.section-column--filled { background: var(--column-bg); padding: calc(var(--block-spacing) * 1.5); border-radius: var(--border-radius); align-self: stretch; }
+
 /* "Light text" sections (for dark backgrounds) */
 .page-section--light { color: #fff; }
 .page-section--light .rich-text, .page-section--light .rich-text h1, .page-section--light .rich-text h2,
@@ -94,9 +90,8 @@ img { max-width: 100%; }
 .page-section--light .rich-text a { color: #fff; }
 .page-section--light .block-button__link--secondary { color: #fff; border-color: rgba(255, 255, 255, .85); }
 .page-section--light .block-button__link--secondary:hover { background: rgba(255, 255, 255, .15); }
-.site-footer { padding: 28px 0 36px; border-top: 1px solid var(--line-color); color: var(--muted-color); font-size: 0.95rem; }
-.site-header .region-grid,
-.site-footer .region-grid { grid-auto-rows: minmax(calc(var(--row-height) - var(--block-spacing) - 16px), auto); }
+.page-section--light .section-column--filled { color: var(--text-color); }
+.page-section--light .section-column--filled .rich-text, .page-section--light .section-column--filled .rich-text :is(h1, h2, h3, a) { color: var(--text-color); }
 
 /* ---------- Rich text (text blocks, card text) ---------- */
 
@@ -143,17 +138,17 @@ mark { color: inherit; padding: 0 .12em; border-radius: .2em; background: #fff1a
 .block-image { display: flex; flex-direction: column; gap: 8px; }
 .block-image__media {
   position: relative;
-  flex: 1 1 auto;
-  min-height: 48px;
   border-radius: var(--block-radius, var(--border-radius));
   overflow: hidden;
   background: var(--soft-color);
 }
 .block-image__link { display: block; }
-/* Absolutely positioned so a huge photo can't push the rows taller. */
-.block-image__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.block-image__media img { width: 100%; height: auto; display: block; }
+/* A chosen shape (16:9, square …): the photo is cropped to fill it. */
+.block-image--cropped .block-image__media { aspect-ratio: var(--ratio); }
+.block-image--cropped .block-image__media img, .block-image--cropped .block-image__link { width: 100%; height: 100%; object-fit: cover; }
 .block-image__caption { font-size: 0.92rem; line-height: 1.4; color: var(--muted-color); text-align: center; }
-.block-image--empty, .block-card__media--empty { display: none; }
+.block-image--empty { display: none; }
 
 /* ---------- Card: photo + title + text (+ link) ---------- */
 
@@ -172,8 +167,8 @@ mark { color: inherit; padding: 0 .12em; border-radius: .2em; background: #fff1a
 .block-card--shadow { border-top: 0; box-shadow: 0 8px 24px rgba(0, 0, 0, .12); }
 .block-card--none { border-top: 0; box-shadow: none; }
 .block-card .block-card__title { color: inherit; }
-.block-card__media { position: relative; flex: 0 0 45%; min-height: 80px; background: var(--soft-color); }
-.block-card__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.block-card__media { aspect-ratio: 16 / 10; background: var(--soft-color); }
+.block-card__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .block-card__body { flex: 1; padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 8px; }
 .block-card__title { margin: 0; font-size: 1.3rem; line-height: 1.25; }
 .block-card__text { font-size: 1rem; }
@@ -263,16 +258,15 @@ mark { color: inherit; padding: 0 .12em; border-radius: .2em; background: #fff1a
 /* ---------- Hero image (Header settings) ---------- */
 
 /* Below the menu: a wide banner */
-.site-hero { margin-top: 22px; overflow: hidden; background: var(--soft-color); }
+.site-hero { overflow: hidden; background: var(--soft-color); }
 .site-hero img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .site-hero--small { height: 220px; }
 .site-hero--medium { height: 360px; }
 .site-hero--large { height: 520px; }
-.site-header:has(.site-hero) { padding-bottom: 0; }
 
 /* Behind the menu: the photo fills the header, name and menu sit on top */
-.site-header--hero { position: relative; overflow: hidden; border-bottom: 0; color: #fff; display: flex; align-items: flex-start; }
-.site-header--hero .region-grid { position: relative; z-index: 1; width: 100%; }
+.site-header--hero { overflow: hidden; border-bottom: 0; color: #fff; }
+.site-header--hero .page-section { position: relative; z-index: 1; }
 .site-hero__bg { position: absolute; inset: 0; z-index: 0; }
 .site-hero__bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .site-hero__bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0, 0, 0, .55), rgba(0, 0, 0, .1) 60%, rgba(0, 0, 0, .25)); }
@@ -292,22 +286,17 @@ mark { color: inherit; padding: 0 .12em; border-radius: .2em; background: #fff1a
 /* ---------- Phones: one simple column, in reading order ---------- */
 
 @media (max-width: 720px) {
-  .region-grid {
-    grid-template-columns: 1fr;
-    grid-auto-rows: auto;
-    padding: 0 18px;
-    gap: max(16px, var(--block-spacing));
-  }
-  .editor-block { grid-column: 1 / -1 !important; grid-row: auto !important; }
-  .site-header .region-grid, .site-footer .region-grid { grid-auto-rows: auto; gap: 10px; }
-  /* Header on phones: name/logo on the left, hamburger on the right; the
+  .section-columns { grid-template-columns: minmax(0, 1fr); padding: 0 18px; gap: max(16px, var(--block-spacing)); }
+  .page-section { padding: 28px 0; }
+  .site-main { padding: 0 0 56px; }
+  /* Header on phones: name/logo on the left, menu button on the right; the
      menu opens as a full-width panel that drops down over the page. */
-  .site-header .region-grid { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
-  .site-header { position: relative; }
-  .site-header .editor-block { flex: 0 1 auto; }
-  .site-header .block-site-title { flex: 1 1 0; min-width: 0; }
+  .site-header .section-columns { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+  .site-header .section-column { flex: 0 1 auto; }
+  .site-header .section-column:has(.block-site-title) { flex: 1 1 0; min-width: 0; }
+  .site-header .page-section { padding: 12px 0; }
   .site-title { font-size: 1.3rem; }
-  .site-header .block-menu { flex: 0 0 auto; justify-content: flex-end; }
+  .site-header .block-menu { justify-content: flex-end; }
   .site-menu__burger { display: inline-flex; flex-direction: column; justify-content: center; gap: 5px; width: 44px; height: 44px; padding: 10px; cursor: pointer; border-radius: var(--border-radius); }
   .site-menu__burger span { display: block; height: 2px; background: currentColor; border-radius: 2px; transition: transform .2s, opacity .2s; }
   .site-menu__toggle:focus-visible + .site-menu__burger { outline: 3px solid var(--primary-color); }
@@ -322,14 +311,7 @@ mark { color: inherit; padding: 0 .12em; border-radius: .2em; background: #fff1a
   .site-menu__toggle:checked + .site-menu__burger span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
   .site-menu a { padding: 12px 14px; border-radius: 0; }
   .site-header--hero .block-menu .site-menu { background: rgba(0, 0, 0, .8); }
-  .section-row { grid-template-columns: 1fr; }
-  .section-row--split { padding: 16px 18px; }
-  .section-row--full .page-section { padding: 28px 0; }
-  .site-main { padding: 24px 0 56px; }
   .post-header { padding: 0 18px; }
-  .block-image__media, .block-card__media { position: static; }
-  .block-image__media img, .block-card__media img { position: static; height: auto; max-height: 80vh; }
-  .block-card__media { flex: none; }
   /* Big headings shrink a little on small screens */
   .rich-text h1, .post-header__title { font-size: calc(var(--text-title-size) * .72); }
   .rich-text h2 { font-size: calc(var(--text-heading-size) * .8); }
