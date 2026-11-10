@@ -46,44 +46,31 @@
     </button>
   </header>
 
-  <!-- Text styles (plain words, not icons-only) -->
-  <div class="formatbar" id="formatbar" role="toolbar" aria-label="Text style">
-    <span class="formatbar__hint">Click on any text to change how it looks →</span>
-    <div class="formatbar__group">
-      <button type="button" data-cmd="title">Big title</button>
-      <button type="button" data-cmd="subtitle">Small title</button>
-      <button type="button" data-cmd="normal">Normal text</button>
-    </div>
-    <div class="formatbar__group">
-      <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
-      <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
-      <button type="button" data-cmd="list" title="Bullet list">• List</button>
-      <button type="button" data-cmd="link" title="Link to another page or website">🔗 Link</button>
-    </div>
-  </div>
-
   <div class="workspace">
 
     <!-- ==============================================================
          SIDEBAR — the website's structure
          ============================================================== -->
     <aside class="sidebar">
-      <h2 class="sidebar__title">Pages</h2>
-      <ul class="page-list" id="page-list" aria-label="Pages"></ul>
-      <button type="button" class="add-page" id="btn-add-page"><span aria-hidden="true">＋</span> Add a new page</button>
+      <h2 class="sidebar__title">Main Menu</h2>
+      <p class="sidebar__help">Pages with a link in your website menu. Drag to change the order.</p>
+      <ul class="page-list page-list--pages" id="menu-pages" data-list="menu" aria-label="Pages in the main menu"></ul>
 
-      <h2 class="sidebar__title sidebar__title--spaced">Blog posts</h2>
-      <ul class="page-list" id="post-list" aria-label="Blog posts"></ul>
-      <p class="sidebar__help" id="posts-empty">No posts yet.</p>
-      <button type="button" class="add-page" id="btn-add-post"><span aria-hidden="true">＋</span> Write a blog post</button>
+      <h2 class="sidebar__title sidebar__title--spaced">Other Pages</h2>
+      <p class="sidebar__help">On your website, but not in the menu.</p>
+      <ul class="page-list page-list--pages" id="other-pages" data-list="other" aria-label="Other pages"></ul>
+
+      <button type="button" class="add-page" id="btn-add-page"><span aria-hidden="true">＋</span> Add a new page</button>
+      <button type="button" class="add-page add-page--blog" id="btn-start-blog" hidden><span aria-hidden="true">📰</span> Start a blog</button>
 
       <h2 class="sidebar__title sidebar__title--spaced">On every page</h2>
-      <ul class="page-list" id="region-list" aria-label="Parts on every page"></ul>
+      <ul class="page-list" id="region-list" aria-label="Header and footer"></ul>
 
       <div class="tips">
         <h3>Good to know</h3>
         <ul>
           <li>Press <b>＋ Add</b> and drag a box onto your page.</li>
+          <li>Click a box to change its settings on the right.</li>
           <li>Hold <b>✥ Move</b> to move a box. It stays where you let go.</li>
           <li><b>Save draft</b> keeps your work safe. Only you can see it.</li>
           <li><b>Publish live</b> puts it on your website for everyone.</li>
@@ -115,51 +102,19 @@
          CANVAS
          ============================================================== -->
     <main class="canvas-area">
-      <!-- Page settings -->
-      <section class="doc-panel" id="page-panel" hidden>
-        <label class="toggle">
-          <input type="checkbox" id="page-in-menu">
-          <span class="toggle__switch" aria-hidden="true"></span>
-          Show link in website menu
-        </label>
-        <span class="doc-panel__address">Web address ends in <code id="page-address"></code></span>
-      </section>
-
-      <!-- Blog post details -->
-      <section class="doc-panel doc-panel--post" id="post-panel" hidden>
-        <div class="doc-field">
-          <label for="post-date">Date</label>
-          <input type="date" id="post-date">
-        </div>
-        <div class="doc-field doc-field--cover">
-          <span class="doc-field__label">Cover photo</span>
-          <div class="cover-picker">
-            <div class="cover-picker__preview" id="post-cover-preview"></div>
-            <button type="button" class="btn btn--secondary btn--small" id="post-cover">Choose a photo</button>
-            <button type="button" class="link-btn link-btn--inline" id="post-cover-remove" hidden>Remove</button>
-          </div>
-        </div>
-        <div class="doc-field doc-field--wide">
-          <label for="post-excerpt">Short summary <small>(shown on your blog page)</small></label>
-          <textarea id="post-excerpt" rows="2" maxlength="400"></textarea>
-        </div>
-      </section>
-
-      <!-- Header / footer note -->
-      <section class="doc-panel doc-panel--note" id="region-panel" hidden>
-        <span aria-hidden="true">ℹ️</span> <span id="region-panel-text"></span>
-      </section>
 
       <div class="paper" id="paper">
         <!-- The top of every page (click to change it) -->
-        <div class="region-preview" id="preview-header" title="Click to change the top of every page" hidden>
-          <span class="region-preview__label">✏️ Top of every page — click to change</span>
+        <div class="region-preview" id="preview-header" title="Click to change the Header (the top of every page)" hidden>
+          <span class="region-preview__label">✏️ Header — click to change it</span>
           <div class="region-preview__content"></div>
         </div>
         <!-- Blog post title & date (from the post details) -->
         <div class="post-head-preview" id="preview-post-header" hidden></div>
 
         <div class="paper__body">
+          <!-- The Header's hero image, shown while editing the Header -->
+          <div class="header-hero" id="header-hero" hidden></div>
           <div class="empty-hint" aria-hidden="true">
             <p class="empty-hint__big">This part is empty</p>
             <p>Press <b>＋ Add</b> and drag a box here.</p>
@@ -168,12 +123,45 @@
         </div>
 
         <!-- The bottom of every page -->
-        <div class="region-preview region-preview--footer" id="preview-footer" title="Click to change the bottom of every page" hidden>
-          <span class="region-preview__label">✏️ Bottom of every page — click to change</span>
+        <div class="region-preview region-preview--footer" id="preview-footer" title="Click to change the Footer (the bottom of every page)" hidden>
+          <span class="region-preview__label">✏️ Footer — click to change it</span>
           <div class="region-preview__content"></div>
         </div>
       </div>
     </main>
+
+    <!-- ==============================================================
+         INSPECTOR — settings of the clicked box (or of the page)
+         ============================================================== -->
+    <aside class="inspector" id="inspector" aria-label="Settings">
+      <div class="inspector__body" id="inspector-body"></div>
+    </aside>
+  </div>
+
+
+  <!-- ================================================================
+       FLOATING TEXT TOOLBAR — appears only while she's in a text box
+       ================================================================ -->
+  <div class="text-toolbar" id="text-toolbar" role="toolbar" aria-label="Text formatting" hidden>
+    <select id="tt-style" class="tt-style" aria-label="Text style" title="Text style"></select>
+    <span class="tt-sep" aria-hidden="true"></span>
+    <button type="button" data-cmd="bold" title="Bold" aria-label="Bold"><b>B</b></button>
+    <button type="button" data-cmd="italic" title="Italic" aria-label="Italic"><i>I</i></button>
+    <button type="button" data-cmd="underline" title="Underline" aria-label="Underline"><u>U</u></button>
+    <div class="tt-hl">
+      <button type="button" data-cmd="highlight" title="Highlight" aria-label="Highlight">🖍️</button>
+      <div class="tt-palette" id="tt-palette" hidden>
+        <button type="button" class="tt-swatch tt-swatch--none" data-highlight="" title="No highlight" aria-label="No highlight">✕</button>
+      </div>
+    </div>
+    <span class="tt-sep" aria-hidden="true"></span>
+      <button type="button" data-align="left" title="Align left" aria-label="Align left"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 6.5h8M2 10h12M2 13.5h8"/></svg></button>
+      <button type="button" data-align="center" title="Center" aria-label="Center"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M4 6.5h8M2 10h12M4 13.5h8"/></svg></button>
+      <button type="button" data-align="right" title="Align right" aria-label="Align right"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M6 6.5h8M2 10h12M6 13.5h8"/></svg></button>
+      <button type="button" data-align="justify" title="Justify (straight edges)" aria-label="Justify (straight edges)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 6.5h12M2 10h12M2 13.5h12"/></svg></button>
+    <span class="tt-sep" aria-hidden="true"></span>
+    <button type="button" data-cmd="list" title="Bullet list" aria-label="Bullet list">• List</button>
+    <button type="button" data-cmd="link" title="Link to another page or website" aria-label="Link">🔗</button>
   </div>
 
   <!-- ================================================================
@@ -203,8 +191,23 @@
       </section>
 
       <section class="settings-section">
-        <label class="settings-label" for="set-font">Letters</label>
+        <label class="settings-label" for="set-font">Letters <small>the font for your whole website</small></label>
         <select class="settings-input" id="set-font"></select>
+        <div class="custom-font">
+          <label class="settings-sublabel" for="set-custom-font">Use a custom font</label>
+          <p class="settings-help">Found a font on fonts.google.com? Paste its name or link here.</p>
+          <div class="custom-font__row">
+            <input class="settings-input" id="set-custom-font" type="text" placeholder="e.g. Dancing Script" autocomplete="off" spellcheck="false">
+            <button type="button" class="btn btn--secondary btn--small" id="btn-custom-font">Use this font</button>
+          </div>
+          <p class="custom-font__status" id="custom-font-status" role="status" aria-live="polite"></p>
+          <button type="button" class="link-btn link-btn--inline" id="btn-custom-font-clear" hidden>Stop using my own font</button>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <span class="settings-label">Text styles <small>the choices in the text toolbar</small></span>
+        <div id="text-styles"></div>
       </section>
 
       <section class="settings-section">
@@ -232,17 +235,6 @@
     </div>
   </dialog>
 
-  <!-- ⚙ Settings for one box (button link, blog feed size, embed code…) -->
-  <dialog id="block-settings" class="dialog dialog--small">
-    <form id="block-settings-form" class="settings-form" method="dialog">
-      <h2 id="block-settings-title">Settings</h2>
-      <div id="block-settings-fields"></div>
-      <div class="dialog__actions">
-        <button type="submit" value="save" class="btn btn--publish">Done</button>
-        <button type="submit" value="cancel" class="btn btn--secondary" formnovalidate>Cancel</button>
-      </div>
-    </form>
-  </dialog>
 
   <!-- PREVIEW — the real stitched page. sandbox: no scripts run in it. -->
   <dialog id="preview-dialog" class="dialog dialog--preview">
@@ -291,6 +283,7 @@
       <label class="newpage-form__label" for="newpage-name" id="newpage-label">What should the page be called?</label>
       <input id="newpage-name" class="newpage-form__input" type="text" maxlength="140" required autocomplete="off">
       <p class="newpage-form__address">Its web address will end in <code id="newpage-file">…</code></p>
+      <label class="newpage-form__check" id="newpage-where"><input type="checkbox" id="newpage-in-menu" checked> Add a link to it in the website menu</label>
       <div class="dialog__actions">
         <button type="submit" value="create" class="btn btn--publish" id="newpage-create">Create page</button>
         <button type="submit" value="cancel" class="btn btn--secondary" formnovalidate>Cancel</button>

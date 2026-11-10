@@ -10,9 +10,14 @@
    block has a stable class you can target:
 
      .editor-block                 every block
-     .block-text  .block-image  .block-card  .block-button
+     .block-text  .block-image  .block-card(--outline|--shadow|--none)  .block-button
      .block-blog-feed  .block-embed  .block-site-title  .block-menu
-     .site-header  .site-footer  .site-main  .post-header  .region-grid
+     .site-header(--hero)  .site-hero  .site-footer  .site-main  .post-header  .region-grid
+     .rich-text h1/h2/h3/p/.text-small  .align-*  mark.hl-*
+
+   Design variables (from Site Settings): --primary-color --secondary-color
+   --border-radius --font-family --block-spacing, and per text style
+   --text-{title|heading|subheading|paragraph|small}-{size|line-height|weight}.
    ========================================================================== */
 
 :root {
@@ -70,14 +75,36 @@ img { max-width: 100%; }
 
 /* ---------- Rich text (text blocks, card text) ---------- */
 
-.rich-text { font-size: 1.1rem; line-height: 1.65; overflow-wrap: break-word; }
+.rich-text {
+  font-size: var(--text-paragraph-size, 18px);
+  line-height: var(--text-paragraph-line-height, 1.65);
+  font-weight: var(--text-paragraph-weight, 400);
+  overflow-wrap: break-word;
+}
 .rich-text > :first-child { margin-top: 0; }
 .rich-text > :last-child { margin-bottom: 0; }
 .rich-text p { margin: 0 0 0.9em; }
+.rich-text h1,
 .rich-text h2,
-.rich-text h3 { font-weight: 600; line-height: 1.2; color: var(--text-color); }
-.rich-text h2 { font-size: clamp(1.9rem, 1.3rem + 2vw, 2.7rem); margin: 0.2em 0 0.35em; }
-.rich-text h3 { font-size: 1.45rem; margin: 0.6em 0 0.35em; }
+.rich-text h3 { color: inherit; }
+
+/* The five text styles (Site Settings → Text styles):
+   Main Heading = h1, Heading = h2, Subheading = h3, Paragraph = p, Small text = p.text-small */
+.rich-text h1 { font-size: var(--text-title-size); line-height: var(--text-title-line-height); font-weight: var(--text-title-weight); margin: 0.1em 0 0.35em; }
+.rich-text h2 { font-size: var(--text-heading-size); line-height: var(--text-heading-line-height); font-weight: var(--text-heading-weight); margin: 0.2em 0 0.35em; }
+.rich-text h3 { font-size: var(--text-subheading-size); line-height: var(--text-subheading-line-height); font-weight: var(--text-subheading-weight); margin: 0.6em 0 0.35em; }
+.rich-text .text-small { font-size: var(--text-small-size); line-height: var(--text-small-line-height); font-weight: var(--text-small-weight); }
+
+/* Alignment and highlights from the text toolbar */
+.align-center { text-align: center; }
+.align-right { text-align: right; }
+.align-justify { text-align: justify; }
+mark { color: inherit; padding: 0 .12em; border-radius: .2em; background: #fff1a8; }
+.hl-yellow { background: #fff1a8; }
+.hl-green { background: #c8f2c2; }
+.hl-blue { background: #cfe4ff; }
+.hl-pink { background: #ffd1e1; }
+.hl-orange { background: #ffdcb5; }
 .rich-text a { color: var(--primary-color); text-underline-offset: 3px; }
 .rich-text ul,
 .rich-text ol { margin: 0 0 0.9em; padding-left: 1.4em; }
@@ -92,10 +119,11 @@ img { max-width: 100%; }
   position: relative;
   flex: 1 1 auto;
   min-height: 48px;
-  border-radius: var(--border-radius);
+  border-radius: var(--block-radius, var(--border-radius));
   overflow: hidden;
   background: var(--soft-color);
 }
+.block-image__link { display: block; }
 /* Absolutely positioned so a huge photo can't push the rows taller. */
 .block-image__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .block-image__caption { font-size: 0.92rem; line-height: 1.4; color: var(--muted-color); text-align: center; }
@@ -107,11 +135,17 @@ img { max-width: 100%; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fff;
+  background: var(--card-bg, #fff);
+  color: var(--card-text, inherit);
   border-radius: var(--border-radius);
   box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
   border-top: 4px solid var(--secondary-color);
 }
+/* Card border styles (Inspector → Border) */
+.block-card--outline { border: 2px solid var(--line-color); box-shadow: none; }
+.block-card--shadow { border-top: 0; box-shadow: 0 8px 24px rgba(0, 0, 0, .12); }
+.block-card--none { border-top: 0; box-shadow: none; }
+.block-card .block-card__title { color: inherit; }
 .block-card__media { position: relative; flex: 0 0 45%; min-height: 80px; background: var(--soft-color); }
 .block-card__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .block-card__body { flex: 1; padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 8px; }
@@ -142,6 +176,7 @@ img { max-width: 100%; }
 }
 .block-button__link--primary { background: var(--primary-color); color: #fff; }
 .block-button__link--secondary { background: transparent; color: var(--primary-color); }
+.block-button__link--accent { background: var(--secondary-color); border-color: var(--secondary-color); color: #fff; }
 .block-button__link:hover { filter: brightness(0.92); }
 
 /* ---------- Blog feed ---------- */
@@ -175,7 +210,7 @@ img { max-width: 100%; }
 
 .post-header { max-width: var(--page-width); margin: 0 auto 28px; padding: 0 calc(var(--block-spacing) + 8px); }
 .post-header__date { margin: 0 0 6px; color: var(--secondary-color); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-size: 0.9rem; }
-.post-header__title { margin: 0; font-size: clamp(2rem, 1.4rem + 2.4vw, 3rem); line-height: 1.15; }
+.post-header__title { margin: 0; font-size: var(--text-title-size); line-height: var(--text-title-line-height); font-weight: var(--text-title-weight); }
 .post-header__cover { margin: 24px 0 0; border-radius: var(--border-radius); overflow: hidden; aspect-ratio: 21 / 9; background: var(--soft-color); }
 .post-header__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
@@ -191,6 +226,30 @@ img { max-width: 100%; }
 .site-menu a { display: block; padding: 8px 16px; border-radius: 999px; color: var(--text-color); text-decoration: none; }
 .site-menu a:hover { background: var(--soft-color); }
 .site-menu a[aria-current="page"] { background: var(--primary-color); color: #fff; }
+
+/* ---------- Hero image (Header settings) ---------- */
+
+/* Below the menu: a wide banner */
+.site-hero { margin-top: 22px; overflow: hidden; background: var(--soft-color); }
+.site-hero img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.site-hero--small { height: 220px; }
+.site-hero--medium { height: 360px; }
+.site-hero--large { height: 520px; }
+.site-header:has(.site-hero) { padding-bottom: 0; }
+
+/* Behind the menu: the photo fills the header, name and menu sit on top */
+.site-header--hero { position: relative; overflow: hidden; border-bottom: 0; color: #fff; display: flex; align-items: flex-start; }
+.site-header--hero .region-grid { position: relative; z-index: 1; width: 100%; }
+.site-hero__bg { position: absolute; inset: 0; z-index: 0; }
+.site-hero__bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.site-hero__bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0, 0, 0, .55), rgba(0, 0, 0, .1) 60%, rgba(0, 0, 0, .25)); }
+.site-header--hero-small { min-height: 240px; }
+.site-header--hero-medium { min-height: 380px; }
+.site-header--hero-large { min-height: 560px; }
+.site-header--hero .site-title,
+.site-header--hero .site-menu a,
+.site-header--hero .rich-text { color: #fff; text-shadow: 0 1px 8px rgba(0, 0, 0, .35); }
+.site-header--hero .site-menu a:hover { background: rgba(255, 255, 255, .18); }
 
 /* ---------- Custom code ---------- */
 
@@ -215,4 +274,10 @@ img { max-width: 100%; }
   .block-image__media, .block-card__media { position: static; }
   .block-image__media img, .block-card__media img { position: static; height: auto; max-height: 80vh; }
   .block-card__media { flex: none; }
+  /* Big headings shrink a little on small screens */
+  .rich-text h1, .post-header__title { font-size: calc(var(--text-title-size) * .72); }
+  .rich-text h2 { font-size: calc(var(--text-heading-size) * .8); }
+  .site-hero--medium, .site-header--hero-medium { height: auto; min-height: 240px; }
+  .site-hero--large, .site-header--hero-large { height: auto; min-height: 320px; }
+  .site-hero--medium img, .site-hero--large img { min-height: 240px; }
 }

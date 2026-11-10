@@ -42,12 +42,55 @@
       "excerptAuto": true
     }
   ],
+  "blogPage": "blog.html",
+  "header": {
+    "hero": {
+      "enabled": false,
+      "src": "",
+      "position": "below",
+      "size": "medium"
+    }
+  },
   "theme": {
     "primaryColor": "#b85c38",
     "secondaryColor": "#6b8b4f",
     "fontFamily": "classic",
     "borderRadius": 14,
     "blockSpacing": 16
+  },
+  "typography": {
+    "styles": {
+      "title": {
+        "name": "Main Heading",
+        "size": 48,
+        "lineHeight": 1.15,
+        "weight": 700
+      },
+      "heading": {
+        "name": "Heading",
+        "size": 36,
+        "lineHeight": 1.2,
+        "weight": 600
+      },
+      "subheading": {
+        "name": "Subheading",
+        "size": 24,
+        "lineHeight": 1.3,
+        "weight": 600
+      },
+      "paragraph": {
+        "name": "Paragraph",
+        "size": 18,
+        "lineHeight": 1.65,
+        "weight": 400
+      },
+      "small": {
+        "name": "Small text",
+        "size": 14,
+        "lineHeight": 1.5,
+        "weight": 400
+      }
+    }
   },
   "customCss": false
 }

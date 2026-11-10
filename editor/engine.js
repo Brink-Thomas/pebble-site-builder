@@ -6,8 +6,8 @@
 
      1. reads every file of the website (GitHubService),
      2. turns them into plain data — the "site":
-          config (site-config.json), docs (pages, blog posts, header,
-          footer: lists of blocks), customCss (theme.css)
+          config (site-config.json), docs (pages, blog posts, Header,
+          Footer: lists of blocks), customCss (theme.css)
      3. lets her edit one doc at a time on a Gridstack canvas,
      4. on Save draft / Publish live, re-renders ALL files from the data
         (PebbleFormat.buildSiteFiles — the stitching engine) and commits the
@@ -16,18 +16,21 @@
 
    Sections:
       1. Setup & small helpers
-      2. Block editors (the editing UI of each block type)
-      3. Canvas: Gridstack + blocks
+      2. Block editors (canvas UI + Inspector fields of each block type)
+      3. Canvas: Gridstack + blocks + selection
       4. Site store: remote files, local changes, what needs saving
-      5. Docs: open / create pages & posts, page & post settings
-      6. Header/footer previews around the page
-      7. Site Settings (design) — live
-      8. Add drawer & block settings
-      9. Save draft & Publish live
-     10. Photos: upload + library
-     11. Preview
-     12. UI wiring
-     13. Boot
+      5. Docs: open / create pages & posts
+      6. Header/Footer previews around the page, hero image
+      7. Sidebar: Main Menu / Other Pages (drag & drop), nested blog posts
+      8. Floating text toolbar
+      9. Inspector (right-hand settings panel)
+     10. Site Settings: colours, fonts, text styles, roundness, spacing
+     11. Add drawer
+     12. Save draft & Publish live
+     13. Photos: upload + library
+     14. Preview
+     15. UI wiring
+     16. Boot
    ========================================================================== */
 
 (function () {
@@ -60,7 +63,6 @@
 
   const isBlankText = (node) => !node.textContent.replace(/​/g, '').trim();
 
-  /** Paste as plain text (no hidden Word/website formatting). */
   function plainPaste(e) {
     e.preventDefault();
     const text = (e.clipboardData || window.clipboardData).getData('text/plain');
@@ -80,27 +82,37 @@
     node.addEventListener('input', () => { refresh(); onInput && onInput(node.textContent.trim()); });
   }
 
+  /** A rich text area (text blocks, card text) — the floating toolbar works on these. */
+  function makeRichEditable(node, html, placeholder) {
+    node.classList.add('rich-text', 'text-editor');
+    node.contentEditable = 'true';
+    node.spellcheck = true;
+    node.dataset.placeholder = placeholder;
+    node.innerHTML = F.sanitizeRichText(html);
+    const refresh = () => node.classList.toggle('is-empty', isBlankText(node));
+    refresh();
+    node.addEventListener('input', refresh);
+    node.addEventListener('paste', plainPaste);
+    return node;
+  }
+
   let service = null;   // GitHubService / MockGitHubService
   let grid = null;      // GridStack instance
   let isLoading = false;
 
-  /** Website name & where to go back to. */
   const dashboardUrl = () => PebbleAuth.appRoot + (service && service.isDemo ? '?demo=1' : '');
 
   /* ========================================================================
      2. BLOCK EDITORS
-     Each block type: how it looks and is edited on the canvas.
        create(data) → element (element._data holds the data, element._render() redraws)
        read(element) → data
-       settings     → fields for the ⚙ Settings dialog (optional)
-     The published look comes from PebbleFormat.BLOCKS; most editors reuse the
-     same CSS classes, so the canvas looks like the website.
+       inspector    → fields for the right-hand settings panel
+     Most editors reuse the published CSS classes, so the canvas looks like
+     the website; Inspector changes redraw the block immediately.
      ======================================================================== */
 
-  /** Context for drawing site-dependent blocks (menu, blog feed) in the editor. */
-  const previewCtx = () => ({ config: liveConfig(), file: store.current, root: '' });
+  const previewCtx = () => ({ config: store.config, file: store.current, root: '' });
 
-  /** Make relative images inside a drawn fragment loadable in the editor. */
   function resolveImagesIn(root) {
     root.querySelectorAll('img').forEach((img) => {
       const src = img.getAttribute('src');
@@ -108,62 +120,63 @@
     });
   }
 
-  function photoPicker(wrap, onPick) {
-    return () => openMediaLibrary({ current: wrap._data.src, onPick });
-  }
+  const LINK_FIELD = (key, label, allowNone) => ({ key, label, type: 'link', allowNone });
 
   const EDITORS = {
     text: {
       label: 'Text', icon: '✍️', hint: 'Stories, titles, lists', size: { w: 6, h: 3 }, min: { w: 2, h: 1 },
-      create(data) {
-        const node = el('div', 'rich-text text-editor');
-        node.contentEditable = 'true';
-        node.spellcheck = true;
-        node.dataset.placeholder = 'Click here and start typing…';
-        node.innerHTML = F.sanitizeRichText(data.html);
-        const refresh = () => node.classList.toggle('is-empty', isBlankText(node));
-        refresh();
-        node.addEventListener('input', refresh);
-        node.addEventListener('paste', plainPaste);
-        return node;
-      },
+      create(data) { return makeRichEditable(el('div'), data.html, 'Click here and start typing…'); },
       read: (node) => ({ html: isBlankText(node) ? '' : F.sanitizeRichText(node.innerHTML) }),
+      inspector: [
+        { type: 'note', text: 'Click into the text to type. A toolbar appears with text styles, bold, underline, highlight and alignment.' },
+        { type: 'note', text: 'Change how each text style looks for the whole website in 🎨 Site Settings → Text styles.' },
+      ],
     },
 
     image: {
       label: 'Photo', icon: '🖼️', hint: 'A picture', size: { w: 6, h: 5 }, min: { w: 2, h: 2 },
       create(data) {
         const wrap = el('div', 'block-image image-editor');
-        wrap._data = { src: F.safeUrl(data.src, 'image'), caption: data.caption || '' };
-        const use = (path) => { wrap._data.src = path; wrap._render(); markDirty(); };
+        wrap._data = { ...F.BLOCKS.image.defaults(), ...data, src: F.safeUrl(data.src, 'image') };
+        const use = (path) => { wrap._data.src = path; wrap._render(); markDirty(); renderInspector(); };
         wrap._render = () => {
+          const d = wrap._data;
           wrap.innerHTML = '';
-          if (wrap._data.src) {
+          if (d.radius !== '' && d.radius != null) wrap.style.setProperty('--block-radius', `${d.radius}px`);
+          else wrap.style.removeProperty('--block-radius');
+          if (d.src) {
             const media = el('div', 'block-image__media');
             const img = el('img');
-            img.alt = wrap._data.caption || 'Photo';
+            img.alt = d.alt || d.caption || 'Photo';
             img.draggable = false;
-            showImage(img, wrap._data.src);
+            showImage(img, d.src);
             const change = el('button', 'image-change', '🔄 Change photo');
             change.type = 'button';
-            change.addEventListener('click', photoPicker(wrap, use));
+            change.addEventListener('click', () => openMediaLibrary({ current: d.src, onPick: use }));
             media.append(img, change);
+            if (d.href) media.appendChild(el('span', 'image-linkbadge', '🔗 Linked'));
             const caption = el('input', 'image-caption');
             caption.type = 'text';
             caption.placeholder = 'Write a caption (optional)';
             caption.maxLength = 200;
-            caption.value = wrap._data.caption;
-            caption.addEventListener('input', () => { wrap._data.caption = caption.value; img.alt = caption.value || 'Photo'; });
+            caption.value = d.caption;
+            caption.addEventListener('input', () => { d.caption = caption.value; });
             wrap.append(media, caption);
           } else {
-            wrap.appendChild(emptyPhotoButton(photoPicker(wrap, use)));
+            wrap.appendChild(emptyPhotoButton(() => openMediaLibrary({ current: '', onPick: use })));
           }
         };
         enablePhotoDrop(wrap, use);
         wrap._render();
         return wrap;
       },
-      read: (wrap) => ({ src: wrap._data.src, caption: wrap._data.caption.trim() }),
+      read: (wrap) => ({ ...wrap._data, caption: String(wrap._data.caption || '').trim() }),
+      inspector: [
+        { type: 'photo', key: 'src', label: 'Photo' },
+        { key: 'alt', type: 'text', label: 'Describe the photo', placeholder: 'e.g. Pink roses along a wooden fence', help: 'Read aloud to people who can’t see the photo, and used by search engines. If empty, the caption is used.' },
+        LINK_FIELD('href', 'When someone clicks the photo, go to', 'Nowhere (no link)'),
+        { key: 'radius', type: 'radius', label: 'Corner roundness' },
+      ],
     },
 
     card: {
@@ -171,41 +184,35 @@
       create(data) {
         const wrap = el('div', 'block-card card-editor');
         wrap._data = { ...F.BLOCKS.card.defaults(), ...data };
-        const use = (path) => { syncCard(wrap); wrap._data.src = path; wrap._render(); markDirty(); };
+        const use = (path) => { syncCard(wrap); wrap._data.src = path; wrap._render(); markDirty(); renderInspector(); };
         wrap._render = () => {
+          const d = wrap._data;
+          wrap.className = `block-card card-editor${d.border && d.border !== 'accent' ? ` block-card--${d.border}` : ''}`;
+          if (d.bg) wrap.style.setProperty('--card-bg', d.bg); else wrap.style.removeProperty('--card-bg');
+          if (d.textColor) wrap.style.setProperty('--card-text', d.textColor); else wrap.style.removeProperty('--card-text');
           wrap.innerHTML = '';
           const media = el('div', 'block-card__media');
-          if (wrap._data.src) {
+          if (d.src) {
             const img = el('img');
             img.alt = '';
-            showImage(img, wrap._data.src);
+            showImage(img, d.src);
             const change = el('button', 'image-change', '🔄 Change photo');
             change.type = 'button';
-            change.addEventListener('click', photoPicker(wrap, use));
-            const remove = el('button', 'image-change image-change--right', '✕ Remove');
-            remove.type = 'button';
-            remove.addEventListener('click', () => use(''));
-            media.append(img, change, remove);
+            change.addEventListener('click', () => openMediaLibrary({ current: d.src, onPick: use }));
+            media.append(img, change);
           } else {
             media.classList.add('card-editor__nomedia');
             const add = el('button', 'card-editor__addphoto', '📷 Add a photo');
             add.type = 'button';
-            add.addEventListener('click', photoPicker(wrap, use));
+            add.addEventListener('click', () => openMediaLibrary({ current: '', onPick: use }));
             media.appendChild(add);
           }
           const body = el('div', 'block-card__body');
-          const title = el('h3', 'block-card__title', wrap._data.title);
+          const title = el('h3', 'block-card__title', d.title);
           makePlainEditable(title, 'Card title');
-          const text = el('div', 'block-card__text rich-text text-editor');
-          text.contentEditable = 'true';
-          text.dataset.placeholder = 'A few words…';
-          text.innerHTML = F.sanitizeRichText(wrap._data.html);
-          const refresh = () => text.classList.toggle('is-empty', isBlankText(text));
-          refresh();
-          text.addEventListener('input', refresh);
-          text.addEventListener('paste', plainPaste);
+          const text = makeRichEditable(el('div', 'block-card__text'), d.html, 'A few words…');
           body.append(title, text);
-          if (wrap._data.href) body.appendChild(el('span', 'block-card__link', wrap._data.linkLabel || 'Read more'));
+          if (d.href) body.appendChild(el('span', 'block-card__link', d.linkLabel || 'Read more'));
           wrap.append(media, body);
         };
         enablePhotoDrop(wrap, use);
@@ -213,9 +220,13 @@
         return wrap;
       },
       read: (wrap) => syncCard(wrap),
-      settings: [
-        { key: 'href', label: 'The card’s link goes to', type: 'link', allowNone: 'No link' },
-        { key: 'linkLabel', label: 'Link text', type: 'text', placeholder: 'Read more' },
+      inspector: [
+        { type: 'photo', key: 'src', label: 'Photo', removable: true },
+        { key: 'bg', type: 'color', label: 'Background color', defaultLabel: 'White' },
+        { key: 'textColor', type: 'color', label: 'Text color', defaultLabel: 'Normal' },
+        { key: 'border', type: 'select', label: 'Border', options: [['accent', 'A colored line on top'], ['outline', 'A thin outline'], ['shadow', 'A soft shadow'], ['none', 'No border']] },
+        LINK_FIELD('href', 'The card’s link goes to', 'No link'),
+        { key: 'linkLabel', type: 'text', label: 'Link text', placeholder: 'Read more' },
       ],
     },
 
@@ -229,30 +240,30 @@
           wrap.className = `block-button button-editor block-button--${d.align}`;
           wrap.innerHTML = '';
           const label = el('span', `block-button__link block-button__link--${d.style}`, d.label);
-          makePlainEditable(label, 'Button text', (v) => { wrap._data.label = v; });
+          makePlainEditable(label, 'Button text', (v) => { wrap._data.label = v; syncInspectorField('label', v); });
           wrap.appendChild(label);
-          if (!d.href) wrap.appendChild(el('span', 'button-editor__hint', '⚙ Choose where it goes'));
+          if (!d.href) wrap.appendChild(el('span', 'button-editor__hint', '← choose where it goes, on the right'));
         };
         wrap._render();
         return wrap;
       },
-      read: (wrap) => ({ ...wrap._data, label: (wrap.querySelector('.block-button__link') || {}).textContent?.trim() || wrap._data.label }),
-      settings: [
-        { key: 'label', label: 'Button text', type: 'text' },
-        { key: 'href', label: 'Goes to', type: 'link' },
-        { key: 'style', label: 'Look', type: 'select', options: [['primary', 'Filled with your main color'], ['secondary', 'Outline only']] },
-        { key: 'align', label: 'Position', type: 'select', options: [['left', 'Left'], ['center', 'Middle'], ['right', 'Right']] },
+      read: (wrap) => ({ ...wrap._data }),
+      inspector: [
+        { key: 'label', type: 'text', label: 'Button text' },
+        LINK_FIELD('href', 'Goes to'),
+        { key: 'style', type: 'select', label: 'Look', options: [['primary', 'Filled with the main color'], ['accent', 'Filled with the second color'], ['secondary', 'Outline only']] },
+        { key: 'align', type: 'select', label: 'Position in its box', options: [['left', 'Left'], ['center', 'Middle'], ['right', 'Right']] },
       ],
     },
 
     'blog-feed': {
-      label: 'Blog posts', icon: '📰', hint: 'Your latest posts', size: { w: 12, h: 6 }, min: { w: 4, h: 3 },
+      label: 'Blog posts', icon: '📰', hint: 'Your latest posts', size: { w: 12, h: 7 }, min: { w: 4, h: 3 },
       create(data) {
         const wrap = el('div', 'block-blog-feed feed-editor');
         wrap._data = { ...F.BLOCKS['blog-feed'].defaults(), ...data };
         wrap._render = () => {
-          if (!liveConfig().posts.length) {
-            wrap.innerHTML = '<div class="feed-editor__empty"><span aria-hidden="true">📰</span><strong>Your blog posts will appear here</strong><small>Write one with “＋ Write a blog post” on the left.</small></div>';
+          if (!store.config.posts.length) {
+            wrap.innerHTML = '<div class="feed-editor__empty"><span aria-hidden="true">📰</span><strong>Your blog posts will appear here</strong><small>Write one from the Blog page in the list on the left.</small></div>';
             return;
           }
           wrap.innerHTML = F.BLOCKS['blog-feed'].render(wrap._data, previewCtx()).inner;
@@ -262,8 +273,9 @@
         return wrap;
       },
       read: (wrap) => ({ ...wrap._data }),
-      settings: [
-        { key: 'limit', label: 'How many posts to show', type: 'select', options: [['3', 'The newest 3'], ['6', 'The newest 6'], ['12', 'The newest 12'], ['0', 'All of them']] },
+      inspector: [
+        { key: 'limit', type: 'select', label: 'How many posts to show', number: true, options: [['3', 'The newest 3'], ['6', 'The newest 6'], ['12', 'The newest 12'], ['0', 'All of them']] },
+        { type: 'note', text: 'Posts appear here automatically, newest first, with their cover photo and summary.' },
       ],
     },
 
@@ -276,7 +288,7 @@
           wrap.innerHTML = '';
           wrap.append(
             el('strong', 'embed-editor__title', '🧩 Custom code'),
-            el('span', 'embed-editor__note', 'It runs on your published website, not here. Use ⚙ Settings to change it.'),
+            el('span', 'embed-editor__note', 'It runs on your published website, not here. Change it on the right.'),
           );
           if (wrap._data.code) wrap.appendChild(el('code', 'embed-editor__code', wrap._data.code.slice(0, 160)));
           // Never put the code into the editor's own page: it could read her login.
@@ -285,9 +297,9 @@
         return wrap;
       },
       read: (wrap) => ({ ...wrap._data }),
-      settings: [
+      inspector: [
         {
-          key: 'code', label: 'Code to add to the page', type: 'code',
+          key: 'code', type: 'code', label: 'Code to add to the page',
           warning: 'For website helpers only. Code copied from the internet can break your website or make it unsafe. If someone sent you this, make sure you trust them.',
         },
       ],
@@ -303,16 +315,14 @@
         input.setAttribute('aria-label', 'Website name');
         input.title = 'Click to change your website’s name';
         input.value = store.config.siteName;
-        input.addEventListener('input', () => {
-          store.config.siteName = input.value.trim() || 'My website';
-          markDirty();
-        });
+        input.addEventListener('input', () => { store.config.siteName = input.value.trim() || 'My website'; markDirty(); });
         wrap.appendChild(input);
         wrap._data = {};
         wrap._render = () => { if (document.activeElement !== input) input.value = store.config.siteName; };
         return wrap;
       },
       read: () => ({}),
+      inspector: [{ type: 'note', text: 'Your website’s name, linked to your homepage. Click it to change it (or use 🎨 Site Settings).' }],
     },
 
     menu: {
@@ -329,9 +339,9 @@
         return wrap;
       },
       read: (wrap) => ({ ...wrap._data }),
-      settings: [
-        { key: 'align', label: 'Position', type: 'select', options: [['left', 'Left'], ['center', 'Middle'], ['right', 'Right']] },
-        { type: 'note', text: 'Which pages appear here: open a page and tick or untick “Show link in website menu”.' },
+      inspector: [
+        { key: 'align', type: 'select', label: 'Position', options: [['left', 'Left'], ['center', 'Middle'], ['right', 'Right']] },
+        { type: 'note', text: 'The menu shows the pages under “Main Menu” in the list on the left. Drag pages there (or to “Other Pages”) to change it.' },
       ],
     },
   };
@@ -352,7 +362,6 @@
     return btn;
   }
 
-  /** Drop a photo file from the desktop onto a block → upload + use it. */
   function enablePhotoDrop(wrap, use) {
     wrap.addEventListener('dragover', (e) => {
       if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) { e.preventDefault(); wrap.classList.add('is-dragover'); }
@@ -367,7 +376,6 @@
     });
   }
 
-  /** Which blocks may be added to the current doc. */
   function allowedHere(type) {
     const kind = currentKind();
     if (EDITORS[type].regionOnly) return kind === 'header' || kind === 'footer';
@@ -376,15 +384,9 @@
   }
 
   /* ========================================================================
-     3. CANVAS
+     3. CANVAS + SELECTION
      ======================================================================== */
 
-  /**
-   *   <div class="grid-stack-item" gs-x gs-y gs-w gs-h data-widget-type>
-   *     <div class="grid-stack-item-content block-shell">
-   *       <div class="block-bar"> ✥ Move | ⚙ Settings | 🗑 Remove </div>
-   *       <div class="block-body"> …block editor… </div>
-   */
   function createBlockElement(type, data, pos) {
     const ed = EDITORS[type];
     const item = el('div', 'grid-stack-item');
@@ -396,11 +398,9 @@
     item.setAttribute('gs-h', size.h);
     item.setAttribute('gs-min-w', ed.min.w);
     item.setAttribute('gs-min-h', ed.min.h);
-
     const shell = el('div', 'grid-stack-item-content block-shell');
     const bar = el('div', 'block-bar');
     bar.innerHTML = '<span class="block-handle" title="Hold and drag to move this box">✥ Move</span>' +
-      (ed.settings ? '<button type="button" class="block-settings" title="Change this box’s settings">⚙ Settings</button>' : '') +
       '<button type="button" class="block-delete" title="Remove this box">🗑 Remove</button>';
     const body = el('div', 'block-body');
     body.appendChild(ed.create({ ...F.BLOCKS[type].defaults(), ...data }));
@@ -426,6 +426,7 @@
 
   function removeBlock(item) {
     const snap = readBlock(item);
+    if (selected === item) selectBlock(null);
     grid.removeWidget(item);
     refreshEmptyState();
     showToast('Box removed.', 'Undo', () => {
@@ -455,6 +456,7 @@
   function loadCanvas(blocks, kind) {
     isLoading = true;
     try {
+      selectBlock(null, { silent: true });
       grid.removeAll(true, false);
       canvasEl().querySelectorAll(':scope > .grid-stack-item').forEach((n) => n.remove());
       grid.opts.minRow = CONFIG.minRows[kind] || 2;
@@ -468,34 +470,39 @@
     }
   }
 
-  /** Redraw blocks that show site-wide things (menu, blog feed, website name). */
   function refreshLiveBlocks() {
     grid.getGridItems().forEach((it) => {
       if (['menu', 'blog-feed', 'site-title'].includes(it.dataset.widgetType)) editorOf(it)._render();
     });
   }
 
+  /** The box whose settings show in the Inspector. */
+  let selected = null;
+
+  function selectBlock(item, { silent = false } = {}) {
+    if (item && !item.isConnected) item = null;
+    if (selected === item) return;
+    if (selected) selected.classList.remove('is-selected');
+    selected = item;
+    if (item) item.classList.add('is-selected');
+    if (!silent) renderInspector();
+  }
+
   /* ========================================================================
      4. SITE STORE
-     ------------------------------------------------------------------------
-     remote:  path → { content, sha }   files as they are in the repository
-              (the draft branch once it exists, otherwise live)
-     livePaths: files that exist on the live site ("New" badges)
-     config / docs / customCss: the site being edited (see site-format.js)
-     Local changes are kept in localStorage (as data) until saved.
      ======================================================================== */
 
   const store = {
-    remote: new Map(),
-    livePaths: new Set(),
+    remote: new Map(),     // path → { content, sha } (draft branch, else live)
+    livePaths: new Set(),  // files on the live site ("New" badges)
     config: F.defaultConfig(),
     docs: {},              // file → { kind, blocks }
     customCss: '',
     baseCss: '',
-    current: null,         // file being edited
+    current: null,
     hasDraftBranch: false,
     draftAhead: false,
-    upgraded: false,       // an older Pebble website, upgraded in memory
+    upgraded: false,
   };
 
   const readRef = () => (store.hasDraftBranch ? service.draftBranch : service.liveBranch);
@@ -504,10 +511,18 @@
   const postMeta = (file) => store.config.posts.find((p) => p.file === file);
   const docMeta = (file) => pageMeta(file) || postMeta(file);
 
-  /** The config, with the doc on the canvas up to date. */
-  function liveConfig() { return store.config; }
+  /** The page that lists the blog posts (its posts nest under it in the sidebar). */
+  function blogPageFile() {
+    if (store.config.blogPage && store.docs[store.config.blogPage]) return store.config.blogPage;
+    // Not recorded (older websites): the best guess is a page called "blog…",
+    // then a page listing ALL posts, then any page with a Blog posts box.
+    const feeds = store.config.pages.filter((p) => (store.docs[p.file] || { blocks: [] }).blocks.some((b) => b.type === 'blog-feed'));
+    const best = feeds.find((p) => /^blog/.test(p.file))
+      || feeds.find((p) => store.docs[p.file].blocks.some((b) => b.type === 'blog-feed' && !b.data.limit))
+      || feeds[0];
+    return best ? best.file : '';
+  }
 
-  /** Copy the canvas into the store. */
   function flushCanvas() {
     if (isLoading || !store.current || !store.docs[store.current]) return;
     store.docs[store.current].blocks = readCanvas();
@@ -518,12 +533,10 @@
     return { config: store.config, docs: store.docs, customCss: store.customCss };
   }
 
-  /** Every file as it should be, from the data. */
   function buildFiles() {
     return F.buildSiteFiles(siteState(), { baseCss: store.baseCss });
   }
 
-  /** Files whose text differs from the repository. */
   function pendingChanges() {
     const files = buildFiles();
     return Object.entries(files)
@@ -536,11 +549,8 @@
 
   function persistLocal(pending) {
     try {
-      if (pending.length) {
-        localStorage.setItem(draftKey(), JSON.stringify({ config: store.config, docs: store.docs, customCss: store.customCss }));
-      } else {
-        localStorage.removeItem(draftKey());
-      }
+      if (pending.length) localStorage.setItem(draftKey(), JSON.stringify({ config: store.config, docs: store.docs, customCss: store.customCss }));
+      else localStorage.removeItem(draftKey());
       return true;
     } catch (err) {
       console.warn('Pebble: local copy not saved', err);
@@ -551,8 +561,6 @@
   function loadLocal() {
     try { return JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch { return null; }
   }
-
-  /* ---------------- autosave & status ---------------- */
 
   let saveTimer = null;
   let lastPending = [];
@@ -583,12 +591,11 @@
   }
 
   /* ========================================================================
-     5. DOCS: open, create, settings
+     5. DOCS
      ======================================================================== */
 
   let isSwitching = false;
 
-  /** Show a doc (page, post, header, footer) on the canvas. */
   function openDoc(file) {
     const doc = store.docs[file];
     if (!doc || isSwitching) return;
@@ -601,70 +608,32 @@
     } finally {
       isSwitching = false;
     }
+    if (doc.kind === 'post') blogExpanded = true;
     renderDocChrome();
     renderSidebar();
+    renderInspector();
     $('.canvas-area').scrollTop = 0;
   }
 
-  /** Everything around the canvas that depends on which doc is open. */
   function renderDocChrome() {
     const kind = currentKind();
-    const file = store.current;
-    const meta = docMeta(file);
+    const meta = docMeta(store.current);
     const title = $('#page-title');
     const label = $('#page-title-label');
     if (kind === 'header' || kind === 'footer') {
-      title.value = kind === 'header' ? 'Top of every page' : 'Bottom of every page';
+      title.value = kind === 'header' ? 'Header' : 'Footer';
       title.disabled = true;
-      label.textContent = 'Editing';
+      label.textContent = 'Editing the';
     } else {
-      title.value = meta ? meta.title : F.nameFromFile(file);
+      title.value = meta ? meta.title : F.nameFromFile(store.current);
       title.disabled = false;
       label.textContent = kind === 'post' ? 'Post title' : 'Page name';
     }
-
-    $('#page-panel').hidden = kind !== 'page';
-    $('#post-panel').hidden = kind !== 'post';
-    $('#region-panel').hidden = !(kind === 'header' || kind === 'footer');
     $('#paper').dataset.kind = kind;
-
-    if (kind === 'page') {
-      $('#page-in-menu').checked = !!(meta && meta.showInNavbar);
-      $('#page-address').textContent = file;
-    }
-    if (kind === 'post') {
-      $('#post-date').value = meta.date;
-      $('#post-excerpt').value = meta.excerptAuto ? '' : meta.excerpt;
-      $('#post-excerpt').placeholder = 'Leave empty and Pebble uses the first words of your post';
-      renderCoverPicker();
-    }
-    if (kind === 'header' || kind === 'footer') {
-      $('#region-panel-text').textContent = kind === 'header'
-        ? 'This is the top of every page. What you put here appears on all your pages and blog posts.'
-        : 'This is the bottom of every page. What you put here appears on all your pages and blog posts.';
-    }
-
-    // Only offer blocks that fit here.
     document.querySelectorAll('#add-drawer .add-tile').forEach((t) => { t.hidden = !allowedHere(t.dataset.widgetType); });
     document.querySelectorAll('#add-drawer .add-group').forEach((g) => { g.hidden = !g.querySelector('.add-tile:not([hidden])'); });
     renderRegionPreviews();
   }
-
-  function renderCoverPicker() {
-    const meta = postMeta(store.current);
-    const box = $('#post-cover-preview');
-    box.innerHTML = '';
-    if (meta && meta.thumbnail) {
-      const img = el('img');
-      img.alt = '';
-      showImage(img, meta.thumbnail);
-      box.appendChild(img);
-    }
-    $('#post-cover-remove').hidden = !(meta && meta.thumbnail);
-    $('#post-cover').textContent = meta && meta.thumbnail ? 'Change photo' : 'Choose a photo';
-  }
-
-  /* ---------------- creating pages & posts ---------------- */
 
   function uniqueFile(base, folder = '') {
     let file = `${folder}${base}.html`;
@@ -673,48 +642,58 @@
     return file;
   }
 
-  function createPage(name) {
+  /** A new page; it goes into the Main Menu (or Other Pages). */
+  function createPage(name, inMenu = true) {
     name = name.trim();
     if (!name) return;
     const file = uniqueFile(F.slugify(name, 'page'));
-    store.config.pages.push({ file, title: name.slice(0, 80), showInNavbar: true });
+    insertPage({ file, title: name.slice(0, 80), showInNavbar: inMenu });
     store.docs[file] = { kind: 'page', blocks: [] };
     openDoc(file);
     markDirty();
-    showToast(`Your new page “${name}” is ready. Add boxes with “＋ Add”.`);
+    showToast(`Your new page “${name}” is ready${inMenu ? ' and has a link in your menu' : ''}. Add boxes with “＋ Add”.`);
+  }
+
+  /** Put a page at the end of its list (Main Menu or Other Pages). */
+  function insertPage(meta) {
+    const pages = store.config.pages;
+    const lastOfList = pages.map((p) => p.showInNavbar === meta.showInNavbar).lastIndexOf(true);
+    pages.splice(lastOfList + 1, 0, meta);
+  }
+
+  /** Make sure there's a Blog page; returns its file. */
+  function ensureBlogPage() {
+    const existing = blogPageFile();
+    if (existing) { store.config.blogPage = existing; return existing; }
+    const file = uniqueFile('blog');
+    insertPage({ file, title: 'Blog', showInNavbar: true });
+    store.docs[file] = {
+      kind: 'page',
+      blocks: [
+        { type: 'text', x: 0, y: 0, w: 12, h: 2, data: { html: '<h2>Blog</h2><p>My latest stories.</p>' } },
+        { type: 'blog-feed', x: 0, y: 2, w: 12, h: 7, data: { limit: 0 } },
+      ],
+    };
+    store.config.blogPage = file;
+    return file;
   }
 
   function createPost(title) {
     title = title.trim();
     if (!title) return;
+    const hadBlog = !!blogPageFile();
+    ensureBlogPage();
     const file = uniqueFile(F.slugify(title, 'post'), 'blog/');
     store.config.posts.push({ file, title: title.slice(0, 140), date: F.todayIso(), thumbnail: '', excerpt: '', excerptAuto: true });
     store.docs[file] = { kind: 'post', blocks: [{ type: 'text', x: 0, y: 0, w: 12, h: 4, data: { html: '' } }] };
-
-    // The first post: make sure there's a page that lists the posts.
-    const hasFeed = Object.values(store.docs).some((d) => d.blocks.some((b) => b.type === 'blog-feed'));
-    let madeBlogPage = false;
-    if (!hasFeed) {
-      const blogFile = uniqueFile('blog');
-      store.config.pages.push({ file: blogFile, title: 'Blog', showInNavbar: true });
-      store.docs[blogFile] = {
-        kind: 'page',
-        blocks: [
-          { type: 'text', x: 0, y: 0, w: 12, h: 2, data: { html: '<h2>Blog</h2><p>My latest stories.</p>' } },
-          { type: 'blog-feed', x: 0, y: 2, w: 12, h: 6, data: { limit: 0 } },
-        ],
-      };
-      madeBlogPage = true;
-    }
+    blogExpanded = true;
     openDoc(file);
     markDirty();
-    showToast(madeBlogPage
-      ? 'Your new post is ready! Pebble also made a “Blog” page that lists all your posts.'
-      : 'Your new post is ready. Write away!');
+    showToast(hadBlog ? 'Your new post is ready. Write away!' : 'Your blog has started! Pebble made a “Blog” page that lists your posts — your new post is under it on the left.');
   }
 
   /* ========================================================================
-     6. HEADER / FOOTER PREVIEWS AROUND THE PAGE
+     6. HEADER / FOOTER PREVIEWS & HERO IMAGE
      ======================================================================== */
 
   function renderRegionPreviews() {
@@ -725,6 +704,7 @@
     const postHead = $('#preview-post-header');
     top.hidden = bottom.hidden = !showRegions;
     postHead.hidden = kind !== 'post';
+    renderHeroOnCanvas();
     if (!showRegions) return;
 
     flushCanvas();
@@ -753,13 +733,702 @@
     }
   }
 
+  /** While editing the Header: show its hero image on the canvas too. */
+  function renderHeroOnCanvas() {
+    const paper = $('#paper');
+    const box = $('#header-hero');
+    const hero = F.normalizeHero(store.config.header && store.config.header.hero);
+    const on = currentKind() === 'header' && hero.enabled;
+    paper.classList.toggle('has-hero-behind', on && hero.position === 'behind');
+    box.hidden = !on;
+    box.className = `header-hero header-hero--${hero.position} header-hero--${hero.size}`;
+    box.innerHTML = '';
+    if (!on) return;
+    const img = el('img');
+    img.alt = '';
+    showImage(img, hero.src);
+    box.appendChild(img);
+  }
+
+  function updateHero(patch) {
+    store.config.header = store.config.header || {};
+    store.config.header.hero = F.normalizeHero({ ...(store.config.header.hero || {}), ...patch });
+    renderRegionPreviews();
+    markDirty();
+  }
+
   /* ========================================================================
-     7. SITE SETTINGS (design) — applied live
+     7. SIDEBAR — Main Menu / Other Pages (drag & drop), nested blog posts
      ======================================================================== */
 
-  /** Put the site's design into the editor: global.css + theme.css. */
+  let blogExpanded = (() => { try { return sessionStorage.getItem('pebble:blog-open') === '1'; } catch { return false; } })();
+
+  function renderSidebar() {
+    const pending = new Set(lastPending.map((p) => p.path));
+    const blogFile = blogPageFile();
+
+    const itemButton = (file, icon, label, sub) => {
+      const btn = el('button', 'page-item' + (file === store.current ? ' is-current' : ''));
+      btn.type = 'button';
+      btn.dataset.file = file;
+      if (file === store.current) btn.setAttribute('aria-current', 'page');
+      btn.appendChild(el('span', 'page-item__icon', icon));
+      const name = el('span', 'page-item__name', label);
+      if (sub) name.appendChild(el('small', 'page-item__date', sub));
+      btn.appendChild(name);
+      if (pending.has(file)) btn.insertAdjacentHTML('beforeend', '<span class="page-item__dot" title="Changes not saved yet"></span>');
+      if (!store.livePaths.has(file)) btn.insertAdjacentHTML('beforeend', '<span class="page-item__badge" title="Not on your website yet">New</span>');
+      return btn;
+    };
+
+    const pageEntry = (p) => {
+      const li = el('li', 'page-entry');
+      li.dataset.file = p.file;
+      li.draggable = true;
+      const row = el('div', 'page-row');
+      row.appendChild(el('span', 'page-grip', '⋮⋮'));
+      row.appendChild(itemButton(p.file, p.file === 'index.html' ? '🏠' : p.file === blogFile ? '📰' : '📄', p.title));
+      const move = el('button', 'page-move', p.showInNavbar ? '↓' : '↑');
+      move.type = 'button';
+      move.dataset.move = p.file;
+      move.title = p.showInNavbar ? 'Move to Other Pages (no menu link)' : 'Move to the Main Menu';
+      move.setAttribute('aria-label', move.title);
+      row.appendChild(move);
+      li.appendChild(row);
+
+      if (p.file === blogFile) {
+        const toggle = el('button', 'page-expand', `${blogExpanded ? '▾' : '▸'} ${store.config.posts.length} blog post${store.config.posts.length === 1 ? '' : 's'}`);
+        toggle.type = 'button';
+        toggle.dataset.toggleBlog = '1';
+        toggle.setAttribute('aria-expanded', String(blogExpanded));
+        li.appendChild(toggle);
+        if (blogExpanded) {
+          const ul = el('ul', 'post-list');
+          for (const post of F.sortedPosts(store.config)) {
+            const pli = el('li');
+            pli.appendChild(itemButton(post.file, '✏️', post.title, F.formatDate(post.date)));
+            ul.appendChild(pli);
+          }
+          const add = el('button', 'add-page add-page--post', '＋ Write a blog post');
+          add.type = 'button';
+          add.dataset.newPost = '1';
+          const ali = el('li');
+          ali.appendChild(add);
+          ul.appendChild(ali);
+          li.appendChild(ul);
+        }
+      }
+      return li;
+    };
+
+    for (const [id, inMenu] of [['#menu-pages', true], ['#other-pages', false]]) {
+      const ul = $(id);
+      ul.innerHTML = '';
+      const list = store.config.pages.filter((p) => p.showInNavbar === inMenu);
+      list.forEach((p) => ul.appendChild(pageEntry(p)));
+      if (!list.length) {
+        const empty = el('li', 'page-list__empty', inMenu ? 'Drag a page here to give it a menu link.' : 'Drag a page here to take it out of the menu. It stays on your website.');
+        ul.appendChild(empty);
+      }
+    }
+    $('#btn-start-blog').hidden = !!blogFile;
+
+    const regions = $('#region-list');
+    regions.innerHTML = '';
+    for (const [file, icon, label] of [['header.html', '⬆️', 'Header'], ['footer.html', '⬇️', 'Footer']]) {
+      const li = el('li');
+      li.appendChild(itemButton(file, icon, label));
+      regions.appendChild(li);
+    }
+  }
+
+  /** Move a page to the Main Menu or Other Pages, before another page (or at the end). */
+  function movePage(file, inMenu, beforeFile) {
+    const pages = store.config.pages;
+    const idx = pages.findIndex((p) => p.file === file);
+    if (idx < 0) return;
+    const [p] = pages.splice(idx, 1);
+    const changedList = p.showInNavbar !== inMenu;
+    p.showInNavbar = inMenu;
+    let at = beforeFile && beforeFile !== file ? pages.findIndex((q) => q.file === beforeFile) : -1;
+    if (at < 0) at = pages.map((q) => q.showInNavbar === inMenu).lastIndexOf(true) + 1;
+    pages.splice(at, 0, p);
+    refreshLiveBlocks();
+    renderRegionPreviews();
+    renderSidebar();
+    renderInspector();
+    markDirty();
+    if (changedList) showToast(inMenu ? `“${p.title}” now has a link in your website menu.` : `“${p.title}” is no longer in the menu. It’s still on your website.`);
+  }
+
+  function wireSidebar() {
+    const side = document.querySelector('.sidebar');
+    side.addEventListener('click', (e) => {
+      const move = e.target.closest('[data-move]');
+      if (move) { const p = pageMeta(move.dataset.move); movePage(p.file, !p.showInNavbar); return; }
+      if (e.target.closest('[data-toggle-blog]')) {
+        blogExpanded = !blogExpanded;
+        try { sessionStorage.setItem('pebble:blog-open', blogExpanded ? '1' : '0'); } catch { /* ignore */ }
+        renderSidebar();
+        return;
+      }
+      if (e.target.closest('[data-new-post]')) { openNewDocDialog('post'); return; }
+      const btn = e.target.closest('.page-item');
+      if (btn && btn.dataset.file !== store.current) openDoc(btn.dataset.file);
+    });
+
+    // Drag & drop between "Main Menu" and "Other Pages" (and to reorder the menu).
+    let dragging = null;
+    const clearMarks = () => side.querySelectorAll('.drop-before, .drop-end').forEach((n) => n.classList.remove('drop-before', 'drop-end'));
+    side.addEventListener('dragstart', (e) => {
+      const li = e.target.closest('.page-entry');
+      if (!li) return;
+      dragging = li.dataset.file;
+      li.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragging);
+    });
+    side.addEventListener('dragend', (e) => {
+      const li = e.target.closest('.page-entry');
+      if (li) li.classList.remove('is-dragging');
+      dragging = null;
+      clearMarks();
+    });
+    side.addEventListener('dragover', (e) => {
+      if (!dragging) return;
+      const list = e.target.closest('.page-list--pages');
+      if (!list) return;
+      e.preventDefault();
+      clearMarks();
+      const li = e.target.closest('.page-entry');
+      if (li && li.dataset.file !== dragging) li.classList.add('drop-before');
+      else if (!li) list.classList.add('drop-end');
+    });
+    side.addEventListener('drop', (e) => {
+      if (!dragging) return;
+      const list = e.target.closest('.page-list--pages');
+      if (!list) return;
+      e.preventDefault();
+      const li = e.target.closest('.page-entry');
+      movePage(dragging, list.dataset.list === 'menu', li ? li.dataset.file : null);
+      clearMarks();
+      dragging = null;
+    });
+
+    $('#btn-add-page').addEventListener('click', () => openNewDocDialog('page'));
+    $('#btn-start-blog').addEventListener('click', () => openNewDocDialog('post'));
+  }
+
+  /* ========================================================================
+     8. FLOATING TEXT TOOLBAR
+     Appears above the text box she's typing in (or pinned under the top
+     bar when there's no room), and disappears when she leaves the text.
+     ======================================================================== */
+
+  let toolbarEditor = null;   // the text area the toolbar works on
+  let savedRange = null;      // her selection, kept while she uses the dropdown
+
+  const toolbar = () => $('#text-toolbar');
+
+  function activeTextEditor() {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    const node = sel.anchorNode;
+    const e = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+    return e ? e.closest('.text-editor') : null;
+  }
+
+  function restoreRange() {
+    if (!toolbarEditor) return;
+    toolbarEditor.focus({ preventScroll: true });
+    if (savedRange) {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(savedRange);
+    }
+  }
+
+  /** The paragraph/heading elements the selection touches. */
+  function blocksInSelection(editor) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return [];
+    const range = sel.getRangeAt(0);
+    const all = Array.from(editor.querySelectorAll('p, h1, h2, h3, li, blockquote')).filter((b) => !b.querySelector('p, h1, h2, h3, li'));
+    let hit = all.filter((b) => range.intersectsNode(b));
+    if (!hit.length) {
+      // Loose text directly in the box: wrap it in a paragraph first.
+      document.execCommand('formatBlock', false, 'p');
+      hit = Array.from(editor.querySelectorAll('p, h1, h2, h3, li, blockquote')).filter((b) => window.getSelection().getRangeAt(0).intersectsNode(b));
+    }
+    return hit;
+  }
+
+  function currentBlock(editor) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    let n = sel.anchorNode;
+    n = n && (n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement);
+    const b = n && n.closest('p, h1, h2, h3, li, blockquote');
+    return b && editor.contains(b) ? b : null;
+  }
+
+  function styleKeyOf(block) {
+    if (!block) return 'paragraph';
+    const tag = block.tagName.toLowerCase();
+    if (tag === 'h1') return 'title';
+    if (tag === 'h2') return 'heading';
+    if (tag === 'h3') return 'subheading';
+    if (tag === 'p' && block.classList.contains('text-small')) return 'small';
+    return 'paragraph';
+  }
+
+  function alignOf(block) {
+    if (!block) return 'left';
+    const m = block.className.match(/\balign-(center|right|justify)\b/);
+    if (m) return m[1];
+    const s = block.style.textAlign;
+    return ['center', 'right', 'justify'].includes(s) ? s : 'left';
+  }
+
+  const TOOLBAR_COMMANDS = {
+    bold: () => document.execCommand('bold'),
+    italic: () => document.execCommand('italic'),
+    underline: () => document.execCommand('underline'),
+    list: () => document.execCommand('insertUnorderedList'),
+    link: () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed) { showToast('First select (highlight) the words you want to turn into a link.'); return; }
+      const range = sel.getRangeAt(0);
+      let url = window.prompt('Paste the website address for this link (or a page, like about.html):', 'https://');
+      if (!url || url === 'https://') return;
+      url = url.trim();
+      if (!/^(https?:|mailto:|#|\/)/i.test(url) && !/^(blog\/)?[a-z0-9-]+\.html$/i.test(url)) url = 'https://' + url;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.execCommand('createLink', false, F.safeUrl(url, 'link'));
+    },
+  };
+
+  function applyTextStyle(key) {
+    restoreRange();
+    const def = F.TEXT_STYLES[key];
+    document.execCommand('formatBlock', false, def.tag);
+    blocksInSelection(toolbarEditor).forEach((b) => b.classList.toggle('text-small', key === 'small'));
+  }
+
+  function applyAlign(align) {
+    blocksInSelection(toolbarEditor).forEach((b) => {
+      b.classList.remove('align-center', 'align-right', 'align-justify', 'align-left');
+      b.style.removeProperty('text-align');
+      if (align !== 'left') b.classList.add(`align-${align}`);
+    });
+  }
+
+  function applyHighlight(name) {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) { showToast('First select (highlight) the words you want to color.'); return; }
+    const range = sel.getRangeAt(0);
+    // Remove existing highlights in the selection first.
+    toolbarEditor.querySelectorAll('mark, span[style*="background"]').forEach((m) => {
+      if (range.intersectsNode(m)) m.replaceWith(...m.childNodes);
+    });
+    if (name) {
+      document.execCommand('styleWithCSS', false, true);
+      document.execCommand('hiliteColor', false, F.HIGHLIGHTS[name].color);
+      document.execCommand('styleWithCSS', false, false);
+    }
+  }
+
+  function afterToolbarChange() {
+    if (!toolbarEditor) return;
+    toolbarEditor.dispatchEvent(new Event('input', { bubbles: true }));
+    updateToolbarState();
+  }
+
+  function positionToolbar() {
+    const tb = toolbar();
+    if (!toolbarEditor || tb.hidden) return;
+    const box = (toolbarEditor.closest('.block-body') || toolbarEditor).getBoundingClientRect();
+    const topLimit = $('.topbar').getBoundingClientRect().bottom + 8;
+    const h = tb.offsetHeight;
+    let top = box.top - h - 10;
+    tb.classList.toggle('is-pinned', top < topLimit);
+    if (top < topLimit) top = topLimit; // no room above: pin it under the top bar
+    const left = Math.max(8, Math.min(box.left, window.innerWidth - tb.offsetWidth - 8));
+    tb.style.top = `${top}px`;
+    tb.style.left = `${left}px`;
+  }
+
+  function showToolbar(editor) {
+    toolbarEditor = editor;
+    const tb = toolbar();
+    tb.hidden = false;
+    renderStyleOptions();
+    updateToolbarState();
+    positionToolbar();
+  }
+
+  function hideToolbar() {
+    toolbar().hidden = true;
+    $('#tt-palette').hidden = true;
+    toolbarEditor = null;
+    savedRange = null;
+  }
+
+  function renderStyleOptions() {
+    const select = $('#tt-style');
+    const styles = F.normalizeTypography(store.config.typography).styles;
+    const current = select.value;
+    select.innerHTML = '';
+    for (const key of Object.keys(F.TEXT_STYLES)) {
+      const o = el('option', '', styles[key].name);
+      o.value = key;
+      select.appendChild(o);
+    }
+    select.value = current || 'paragraph';
+  }
+
+  function updateToolbarState() {
+    if (!toolbarEditor) return;
+    const block = currentBlock(toolbarEditor);
+    $('#tt-style').value = styleKeyOf(block);
+    const align = alignOf(block);
+    toolbar().querySelectorAll('[data-align]').forEach((b) => b.classList.toggle('is-on', b.dataset.align === align));
+    for (const cmd of ['bold', 'italic', 'underline']) {
+      let on = false;
+      try { on = document.queryCommandState(cmd); } catch { /* ignore */ }
+      const b = toolbar().querySelector(`[data-cmd="${cmd}"]`);
+      if (b) b.classList.toggle('is-on', on);
+    }
+  }
+
+  function wireToolbar() {
+    const tb = toolbar();
+
+    // Highlight palette
+    const palette = $('#tt-palette');
+    for (const [name, h] of Object.entries(F.HIGHLIGHTS)) {
+      const b = el('button', 'tt-swatch');
+      b.type = 'button';
+      b.dataset.highlight = name;
+      b.style.background = h.color;
+      b.title = h.label;
+      b.setAttribute('aria-label', `${h.label} highlight`);
+      palette.insertBefore(b, palette.lastElementChild);
+    }
+
+    // Keep the text selection when clicking toolbar buttons.
+    tb.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+    tb.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || !toolbarEditor) return;
+      if (btn.dataset.cmd === 'highlight') { palette.hidden = !palette.hidden; return; }
+      if (btn.dataset.highlight != null) { applyHighlight(btn.dataset.highlight); palette.hidden = true; afterToolbarChange(); return; }
+      if (btn.dataset.align) { applyAlign(btn.dataset.align); afterToolbarChange(); return; }
+      if (btn.dataset.cmd && TOOLBAR_COMMANDS[btn.dataset.cmd]) { TOOLBAR_COMMANDS[btn.dataset.cmd](); afterToolbarChange(); }
+    });
+    $('#tt-style').addEventListener('change', (e) => { applyTextStyle(e.target.value); afterToolbarChange(); });
+
+    // Show when a text box is focused; hide when she leaves it.
+    document.addEventListener('focusin', (e) => {
+      const ed = e.target.closest && e.target.closest('.text-editor');
+      if (ed) showToolbar(ed);
+    });
+    document.addEventListener('focusout', () => {
+      setTimeout(() => {
+        const a = document.activeElement;
+        if (a && (a.closest('#text-toolbar') || a.closest('.text-editor'))) return;
+        hideToolbar();
+      }, 0);
+    });
+    // Also follow the text cursor itself (doesn't depend on focus events).
+    document.addEventListener('selectionchange', () => {
+      const ed = activeTextEditor();
+      if (ed && ed !== toolbarEditor && ed.isContentEditable) showToolbar(ed);
+      if (ed && ed === toolbarEditor) {
+        const sel = window.getSelection();
+        if (sel.rangeCount) savedRange = sel.getRangeAt(0).cloneRange();
+        updateToolbarState();
+      }
+    });
+    $('.canvas-area').addEventListener('scroll', positionToolbar, { passive: true });
+    window.addEventListener('resize', positionToolbar);
+    try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch { /* ignore */ }
+  }
+
+  /* ========================================================================
+     9. INSPECTOR — the right-hand settings panel
+     Shows the clicked box's settings; with nothing selected, the settings
+     of the page / post / Header / Footer being edited.
+     ======================================================================== */
+
+  function linkOptions(allowNone) {
+    const opts = [['', allowNone || '— Choose a page —']];
+    for (const p of store.config.pages) opts.push([p.file, `📄 ${p.title}`]);
+    for (const p of F.sortedPosts(store.config)) opts.push([p.file, `📰 ${p.title}`]);
+    opts.push(['__external__', '🌐 Another website…']);
+    return opts;
+  }
+
+  /** Build one Inspector field. onChange(value) applies it. */
+  function inspectorField(f, value, onChange) {
+    if (f.type === 'note') return el('p', 'insp-note', f.text);
+    const row = el('div', 'insp-field');
+    const id = `insp-${f.key}`;
+    const label = el('label', 'insp-label', f.label);
+    label.htmlFor = id;
+    row.appendChild(label);
+
+    if (f.type === 'text') {
+      const input = el('input', 'insp-input');
+      input.id = id;
+      input.type = 'text';
+      input.value = value || '';
+      input.dataset.key = f.key;
+      if (f.placeholder) input.placeholder = f.placeholder;
+      input.addEventListener('input', () => onChange(input.value));
+      row.appendChild(input);
+    } else if (f.type === 'textarea') {
+      const ta = el('textarea', 'insp-input');
+      ta.id = id;
+      ta.rows = 3;
+      ta.value = value || '';
+      if (f.placeholder) ta.placeholder = f.placeholder;
+      ta.addEventListener('input', () => onChange(ta.value));
+      row.appendChild(ta);
+    } else if (f.type === 'select') {
+      const sel = el('select', 'insp-input');
+      sel.id = id;
+      for (const [v, t] of f.options) { const o = el('option', '', t); o.value = v; sel.appendChild(o); }
+      sel.value = value == null ? '' : String(value);
+      sel.addEventListener('change', () => onChange(f.number ? parseInt(sel.value, 10) : sel.value));
+      row.appendChild(sel);
+    } else if (f.type === 'link') {
+      const sel = el('select', 'insp-input');
+      sel.id = id;
+      for (const [v, t] of linkOptions(f.allowNone)) { const o = el('option', '', t); o.value = v; sel.appendChild(o); }
+      const internal = !value || store.docs[value];
+      sel.value = internal ? (value || '') : '__external__';
+      const ext = el('input', 'insp-input insp-input--external');
+      ext.type = 'url';
+      ext.placeholder = 'https://www.example.com';
+      ext.value = internal ? '' : value;
+      ext.hidden = internal;
+      const applyExt = () => {
+        let v = ext.value.trim();
+        if (v && !/^(https?:|mailto:|tel:)/i.test(v)) v = 'https://' + v;
+        onChange(F.safeUrl(v, 'link'));
+      };
+      sel.addEventListener('change', () => {
+        ext.hidden = sel.value !== '__external__';
+        if (ext.hidden) onChange(sel.value); else { ext.focus(); applyExt(); }
+      });
+      ext.addEventListener('input', applyExt);
+      row.append(sel, ext);
+    } else if (f.type === 'color') {
+      const box = el('div', 'insp-colors');
+      const t = F.normalizeTheme(store.config.theme);
+      const choices = [['', f.defaultLabel || 'Default'], [t.primaryColor, 'Main color'], [t.secondaryColor, 'Second color'],
+        ['#ffffff', 'White'], ['#f7f3ec', 'Cream'], ['#eef3f8', 'Light blue'], ['#2d2a26', 'Dark']];
+      const draw = (current) => {
+        box.innerHTML = '';
+        for (const [c, name] of choices) {
+          const b = el('button', 'insp-swatch' + (c === '' ? ' insp-swatch--default' : '') + ((current || '') === c ? ' is-on' : ''));
+          b.type = 'button';
+          b.title = name;
+          b.setAttribute('aria-label', name);
+          if (c) b.style.background = c; else b.textContent = '∅';
+          b.addEventListener('click', () => { onChange(c); draw(c); });
+          box.appendChild(b);
+        }
+        const custom = el('label', 'insp-swatch insp-swatch--custom', '＋');
+        custom.title = 'Pick any color';
+        const pick = el('input');
+        pick.type = 'color';
+        pick.value = current || '#ffffff';
+        pick.setAttribute('aria-label', 'Pick any color');
+        pick.addEventListener('input', () => { onChange(pick.value); box.querySelectorAll('.is-on').forEach((n) => n.classList.remove('is-on')); });
+        custom.appendChild(pick);
+        box.appendChild(custom);
+      };
+      draw(value);
+      row.appendChild(box);
+    } else if (f.type === 'radius') {
+      const useSite = el('label', 'insp-check');
+      const cb = el('input');
+      cb.type = 'checkbox';
+      cb.checked = value === '' || value == null;
+      useSite.append(cb, document.createTextNode(' Same as the rest of the website'));
+      const range = el('input', 'insp-range');
+      range.type = 'range';
+      range.min = 0;
+      range.max = 40;
+      range.value = value === '' || value == null ? F.normalizeTheme(store.config.theme).borderRadius : value;
+      range.hidden = cb.checked;
+      const labels = el('div', 'range-labels');
+      labels.innerHTML = '<span>Square</span><span>Round</span>';
+      labels.hidden = cb.checked;
+      cb.addEventListener('change', () => {
+        range.hidden = labels.hidden = cb.checked;
+        onChange(cb.checked ? '' : parseInt(range.value, 10));
+      });
+      range.addEventListener('input', () => onChange(parseInt(range.value, 10)));
+      row.append(useSite, range, labels);
+    } else if (f.type === 'photo') {
+      const box = el('div', 'insp-photo');
+      if (value) {
+        const img = el('img');
+        img.alt = '';
+        showImage(img, value);
+        box.appendChild(img);
+      } else {
+        box.appendChild(el('span', 'insp-photo__none', 'No photo yet'));
+      }
+      const actions = el('div', 'insp-photo__actions');
+      const pick = el('button', 'btn btn--secondary btn--small', value ? '🔄 Replace photo' : '📷 Choose a photo');
+      pick.type = 'button';
+      pick.addEventListener('click', () => openMediaLibrary({ current: value, onPick: (p) => { onChange(p); renderInspector(); } }));
+      actions.appendChild(pick);
+      if (f.removable && value) {
+        const rm = el('button', 'link-btn link-btn--inline', 'Remove');
+        rm.type = 'button';
+        rm.addEventListener('click', () => { onChange(''); renderInspector(); });
+        actions.appendChild(rm);
+      }
+      row.append(box, actions);
+    } else if (f.type === 'code') {
+      if (f.warning) {
+        const warn = el('div', 'settings-warning');
+        warn.appendChild(el('strong', '', '⚠️ Careful'));
+        warn.appendChild(el('span', '', f.warning));
+        row.insertBefore(warn, label);
+      }
+      const ta = el('textarea', 'insp-input insp-code');
+      ta.id = id;
+      ta.rows = 10;
+      ta.spellcheck = false;
+      ta.value = value || '';
+      ta.placeholder = '<iframe src="…"></iframe>';
+      ta.addEventListener('input', () => onChange(ta.value));
+      row.appendChild(ta);
+    } else if (f.type === 'date') {
+      const input = el('input', 'insp-input');
+      input.id = id;
+      input.type = 'date';
+      input.value = value || '';
+      input.addEventListener('change', () => onChange(input.value));
+      row.appendChild(input);
+    } else if (f.type === 'toggle') {
+      const lab = el('label', 'toggle');
+      const cb = el('input');
+      cb.type = 'checkbox';
+      cb.id = id;
+      cb.checked = !!value;
+      lab.append(cb, el('span', 'toggle__switch'), document.createTextNode(` ${f.text || ''}`));
+      cb.addEventListener('change', () => onChange(cb.checked));
+      label.remove();
+      row.appendChild(lab);
+    }
+    if (f.help) row.appendChild(el('p', 'insp-help', f.help));
+    return row;
+  }
+
+  /** Keep an Inspector input in step when the same value is edited on the canvas. */
+  function syncInspectorField(key, value) {
+    const input = document.querySelector(`#inspector [data-key="${key}"]`);
+    if (input && document.activeElement !== input) input.value = value;
+  }
+
+  function renderInspector() {
+    const body = $('#inspector-body');
+    body.innerHTML = '';
+    if (selected && selected.isConnected) renderBlockInspector(body, selected);
+    else renderDocInspector(body);
+  }
+
+  function renderBlockInspector(body, item) {
+    const type = item.dataset.widgetType;
+    const ed = EDITORS[type];
+    const node = editorOf(item);
+    const head = el('div', 'insp-head');
+    head.append(el('span', 'insp-head__icon', ed.icon), el('h2', 'insp-head__title', ed.label));
+    const close = el('button', 'insp-head__close', '✕');
+    close.type = 'button';
+    close.title = 'Done with this box';
+    close.addEventListener('click', () => selectBlock(null));
+    head.appendChild(close);
+    body.appendChild(head);
+
+    const data = ed.read(node);
+    for (const f of ed.inspector || []) {
+      body.appendChild(inspectorField(f, data[f.key], (value) => {
+        const current = ed.read(node);       // pick up what she typed on the canvas
+        current[f.key] = value;
+        node._data = { ...node._data, ...current };
+        node._render();
+        markDirty();
+      }));
+    }
+
+    const remove = el('button', 'insp-remove', '🗑 Remove this box');
+    remove.type = 'button';
+    remove.addEventListener('click', () => removeBlock(item));
+    body.appendChild(remove);
+  }
+
+  function renderDocInspector(body) {
+    const kind = currentKind();
+    const file = store.current;
+    const head = el('div', 'insp-head');
+    const icons = { page: '📄', post: '✏️', header: '⬆️', footer: '⬇️' };
+    const titles = { page: 'Page settings', post: 'Blog post', header: 'Header', footer: 'Footer' };
+    head.append(el('span', 'insp-head__icon', icons[kind]), el('h2', 'insp-head__title', titles[kind]));
+    body.appendChild(head);
+
+    if (kind === 'page') {
+      const meta = pageMeta(file);
+      body.appendChild(el('p', 'insp-note', `Web address ends in ${file}`));
+      const where = el('div', 'insp-field');
+      where.appendChild(el('span', 'insp-label', 'Where this page is listed'));
+      where.appendChild(el('p', 'insp-value', meta.showInNavbar ? '✓ In the Main Menu (it has a link in your website menu)' : 'In Other Pages (no link in the menu)'));
+      const move = el('button', 'btn btn--secondary btn--small', meta.showInNavbar ? 'Move to Other Pages' : 'Add to the Main Menu');
+      move.type = 'button';
+      move.addEventListener('click', () => movePage(file, !meta.showInNavbar));
+      where.appendChild(move);
+      body.appendChild(where);
+      if (file === blogPageFile()) body.appendChild(el('p', 'insp-note', '📰 This is your blog page. Your posts are listed under it on the left.'));
+    } else if (kind === 'post') {
+      const meta = postMeta(file);
+      const update = (patch) => { Object.assign(meta, patch); renderRegionPreviews(); markDirty(); };
+      body.appendChild(inspectorField({ key: 'date', type: 'date', label: 'Date' }, meta.date, (v) => { if (/^\d{4}-\d{2}-\d{2}$/.test(v)) update({ date: v }); }));
+      body.appendChild(inspectorField({ key: 'thumbnail', type: 'photo', label: 'Cover photo', removable: true }, meta.thumbnail, (v) => update({ thumbnail: v })));
+      body.appendChild(inspectorField({ key: 'excerpt', type: 'textarea', label: 'Short summary', placeholder: 'Leave empty and Pebble uses the first words of your post', help: 'Shown under the post on your blog page.' },
+        meta.excerptAuto ? '' : meta.excerpt, (v) => update({ excerpt: v.trim(), excerptAuto: !v.trim() })));
+    } else if (kind === 'header') {
+      body.appendChild(el('p', 'insp-note', 'The Header is the top of every page: your website name, the menu, and anything else you add here appears on all pages and blog posts.'));
+      const hero = F.normalizeHero(store.config.header && store.config.header.hero);
+      const section = el('div', 'insp-section');
+      section.appendChild(el('h3', 'insp-section__title', '🌄 Hero image'));
+      section.appendChild(el('p', 'insp-help', 'A big photo at the top of every page.'));
+      section.appendChild(inspectorField({ key: 'heroSrc', type: 'photo', label: 'Photo' }, hero.src, (v) => updateHero({ src: v, enabled: !!v })));
+      if (hero.src) {
+        section.appendChild(inspectorField({ key: 'heroOn', type: 'toggle', text: 'Show the hero image' }, hero.enabled, (v) => updateHero({ enabled: v })));
+        section.appendChild(inspectorField({ key: 'heroPos', type: 'select', label: 'Where', options: [['behind', 'Behind the website name and menu'], ['below', 'Below the menu, as a wide banner']] }, hero.position, (v) => updateHero({ position: v })));
+        section.appendChild(inspectorField({ key: 'heroSize', type: 'select', label: 'Height', options: [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']] }, hero.size, (v) => updateHero({ size: v })));
+      }
+      body.appendChild(section);
+    } else if (kind === 'footer') {
+      body.appendChild(el('p', 'insp-note', 'The Footer is the bottom of every page. Good places for: a copyright line, your email address, or links to other pages.'));
+    }
+    body.appendChild(el('p', 'insp-tip', '💡 Click a box on the page to change its settings here.'));
+  }
+
+  /* ========================================================================
+     10. SITE SETTINGS — colours, fonts, text styles, roundness, spacing
+     ======================================================================== */
+
   function applyTheme() {
-    $('#site-theme').textContent = F.globalCss(store.config.theme, store.baseCss);
+    $('#site-theme').textContent = F.globalCss(store.config.theme, store.baseCss, store.config.typography);
     $('#site-custom').textContent = store.customCss || '';
     const spacing = F.normalizeTheme(store.config.theme).blockSpacing;
     if (grid && grid.getMargin() !== spacing / 2) grid.margin(spacing / 2);
@@ -770,18 +1439,102 @@
     secondary: ['#6b8b4f', '#e9a03b', '#3aa8a0', '#d76a85', '#7a8ca3', '#a0522d', '#5c6bc0', '#b5838d'],
   };
 
+  const WEIGHT_NAMES = { 300: 'Light', 400: 'Normal', 500: 'Medium', 600: 'Semi-bold', 700: 'Bold', 800: 'Extra bold', 900: 'Black' };
+
   function renderSettings() {
     const t = F.normalizeTheme(store.config.theme);
+    const ty = F.normalizeTypography(store.config.typography);
     $('#set-site-name').value = store.config.siteName;
     for (const which of ['primary', 'secondary']) {
       const value = t[`${which}Color`];
       $(`#set-${which}`).value = value;
       document.querySelectorAll(`[data-swatch="${which}"]`).forEach((b) => b.classList.toggle('is-on', b.dataset.color === value));
     }
-    $('#set-font').value = t.fontFamily;
+    // Fonts: the list, plus the custom font if there is one
+    const font = $('#set-font');
+    const customOpt = font.querySelector('option[value="custom"]');
+    if (ty.customFont) { customOpt.hidden = false; customOpt.textContent = `${ty.customFont.name} (your own font)`; } else customOpt.hidden = true;
+    font.value = t.fontFamily === 'custom' && !ty.customFont ? 'classic' : t.fontFamily;
+    $('#custom-font-status').textContent = ty.customFont ? `✓ Using “${ty.customFont.name}”` : '';
+    $('#custom-font-status').className = 'custom-font__status' + (ty.customFont ? ' is-ok' : '');
+    $('#btn-custom-font-clear').hidden = !ty.customFont;
+
     $('#set-radius').value = t.borderRadius;
     $('#set-spacing').value = t.blockSpacing;
     $('#set-custom-css').value = store.customCss || '';
+    renderTextStyleSettings();
+  }
+
+  /** The five text styles, each with name / size / line spacing / boldness. */
+  function renderTextStyleSettings() {
+    const box = $('#text-styles');
+    const ty = F.normalizeTypography(store.config.typography);
+    const openKey = box.querySelector('details[open]') && box.querySelector('details[open]').dataset.key;
+    box.innerHTML = '';
+    for (const [key, def] of Object.entries(F.TEXT_STYLES)) {
+      const s = ty.styles[key];
+      const d = el('details', 'text-style');
+      d.dataset.key = key;
+      if (key === openKey) d.open = true;
+      const sum = el('summary', 'text-style__summary');
+      const sample = el('span', 'text-style__sample', s.name);
+      sample.style.fontSize = `${Math.min(s.size, 30)}px`;
+      sample.style.fontWeight = s.weight;
+      sample.style.fontFamily = 'var(--font-family)';
+      sum.append(sample, el('span', 'text-style__meta', `${s.size}px · ${WEIGHT_NAMES[s.weight] || s.weight}`));
+      d.appendChild(sum);
+
+      const rows = el('div', 'text-style__fields');
+      const field = (label, input) => { const r = el('label', 'text-style__field'); r.append(el('span', '', label), input); return r; };
+
+      const name = el('input', 'settings-input');
+      name.type = 'text';
+      name.maxLength = 30;
+      name.value = s.name;
+      name.addEventListener('input', () => updateTextStyle(key, { name: name.value || def.name }, false));
+      rows.appendChild(field('Name', name));
+
+      const size = el('input', 'settings-range');
+      size.type = 'range'; size.min = 10; size.max = 96; size.value = s.size;
+      const sizeOut = el('output', 'text-style__out', `${s.size}px`);
+      size.addEventListener('input', () => { sizeOut.textContent = `${size.value}px`; updateTextStyle(key, { size: size.value }); });
+      const sizeWrap = el('div', 'text-style__range'); sizeWrap.append(size, sizeOut);
+      rows.appendChild(field('Size', sizeWrap));
+
+      const lh = el('input', 'settings-range');
+      lh.type = 'range'; lh.min = 0.9; lh.max = 2.4; lh.step = 0.05; lh.value = s.lineHeight;
+      const lhOut = el('output', 'text-style__out', String(s.lineHeight));
+      lh.addEventListener('input', () => { lhOut.textContent = lh.value; updateTextStyle(key, { lineHeight: lh.value }); });
+      const lhWrap = el('div', 'text-style__range'); lhWrap.append(lh, lhOut);
+      rows.appendChild(field('Line spacing', lhWrap));
+
+      const weight = el('select', 'settings-input');
+      for (const w of F.WEIGHTS) { const o = el('option', '', WEIGHT_NAMES[w]); o.value = w; weight.appendChild(o); }
+      weight.value = s.weight;
+      weight.addEventListener('change', () => updateTextStyle(key, { weight: weight.value }));
+      rows.appendChild(field('Boldness', weight));
+
+      d.appendChild(rows);
+      box.appendChild(d);
+    }
+  }
+
+  function updateTextStyle(key, patch, redraw = true) {
+    const ty = F.normalizeTypography(store.config.typography);
+    ty.styles[key] = { ...ty.styles[key], ...patch };
+    store.config.typography = F.normalizeTypography(ty);
+    applyTheme();
+    markDirty();
+    const d = document.querySelector(`#text-styles details[data-key="${key}"]`);
+    if (d) {
+      const s = store.config.typography.styles[key];
+      const sample = d.querySelector('.text-style__sample');
+      sample.textContent = s.name;
+      sample.style.fontSize = `${Math.min(s.size, 30)}px`;
+      sample.style.fontWeight = s.weight;
+      d.querySelector('.text-style__meta').textContent = `${s.size}px · ${WEIGHT_NAMES[s.weight] || s.weight}`;
+    }
+    if (!redraw) renderStyleOptions();
   }
 
   function updateTheme(patch) {
@@ -794,7 +1547,6 @@
     const dialog = $('#settings-dialog');
     $('#btn-settings').addEventListener('click', () => { renderSettings(); dialog.showModal(); });
 
-    // swatches
     for (const which of ['primary', 'secondary']) {
       const row = $(`#swatches-${which}`);
       COLOR_SWATCHES[which].forEach((color) => {
@@ -811,17 +1563,52 @@
       $(`#set-${which}`).addEventListener('input', (e) => { updateTheme({ [`${which}Color`]: e.target.value }); renderSettings(); });
     }
 
+    // Font list: popular fonts first, older choices after.
     const font = $('#set-font');
+    const popular = el('optgroup');
+    popular.label = 'Popular fonts';
+    const older = el('optgroup');
+    older.label = 'More';
     for (const [key, f] of Object.entries(F.FONTS)) {
       const opt = el('option', '', f.label);
       opt.value = key;
-      opt.style.fontFamily = f.stack;
-      font.appendChild(opt);
+      (['elegant', 'friendly', 'rounded', 'typewriter'].includes(key) ? older : popular).appendChild(opt);
     }
+    const customOpt = el('option', '', 'Your own font');
+    customOpt.value = 'custom';
+    customOpt.hidden = true;
+    font.append(popular, older, customOpt);
     font.addEventListener('change', () => updateTheme({ fontFamily: font.value }));
+
+    // The font escape hatch
+    const customInput = $('#set-custom-font');
+    const useCustom = () => {
+      const parsed = F.parseCustomFont(customInput.value);
+      const status = $('#custom-font-status');
+      if (!parsed) {
+        status.className = 'custom-font__status is-error';
+        status.textContent = 'Pebble couldn’t find a Google font in that. Paste a font name (like “Dancing Script”) or the link from fonts.google.com.';
+        return;
+      }
+      store.config.typography = F.normalizeTypography({ ...store.config.typography, customFont: parsed });
+      store.config.theme = F.normalizeTheme({ ...store.config.theme, fontFamily: 'custom' });
+      applyTheme();
+      markDirty();
+      customInput.value = '';
+      renderSettings();
+    };
+    $('#btn-custom-font').addEventListener('click', useCustom);
+    customInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); useCustom(); } });
+    $('#btn-custom-font-clear').addEventListener('click', () => {
+      store.config.typography = F.normalizeTypography({ ...store.config.typography, customFont: null });
+      if (store.config.theme.fontFamily === 'custom') store.config.theme = F.normalizeTheme({ ...store.config.theme, fontFamily: 'classic' });
+      applyTheme();
+      markDirty();
+      renderSettings();
+    });
+
     $('#set-radius').addEventListener('input', (e) => updateTheme({ borderRadius: e.target.value }));
     $('#set-spacing').addEventListener('input', (e) => updateTheme({ blockSpacing: e.target.value }));
-
     $('#set-site-name').addEventListener('input', (e) => {
       store.config.siteName = e.target.value.trim() || 'My website';
       refreshLiveBlocks();
@@ -829,7 +1616,6 @@
       markDirty();
     });
 
-    // Advanced: extra CSS (theme.css)
     const css = $('#set-custom-css');
     css.addEventListener('input', () => { store.customCss = css.value; applyTheme(); markDirty(); });
     const upload = $('#file-css');
@@ -844,10 +1630,11 @@
       markDirty();
       showToast(`Added “${file.name}”.`);
     });
+    dialog.addEventListener('close', () => { refreshLiveBlocks(); renderInspector(); });
   }
 
   /* ========================================================================
-     8. ADD DRAWER & BLOCK SETTINGS
+     11. ADD DRAWER
      ======================================================================== */
 
   function buildDrawer() {
@@ -881,11 +1668,10 @@
   function openDrawer() { $('#add-drawer').hidden = false; $('#btn-add').setAttribute('aria-expanded', 'true'); }
   function closeDrawer() { $('#add-drawer').hidden = true; $('#btn-add').setAttribute('aria-expanded', 'false'); }
 
-  function afterAdd(item, type) {
+  function afterAdd(item) {
     markDirty();
     closeDrawer();
-    if (type === 'embed') setTimeout(() => openBlockSettings(item), 150); // straight to the warning + code box
-    if (type === 'button') setTimeout(() => openBlockSettings(item), 150);
+    selectBlock(item);   // its settings show on the right straight away
   }
 
   function wireDrawer() {
@@ -894,7 +1680,6 @@
     $('#add-close').addEventListener('click', closeDrawer);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#add-drawer').hidden) closeDrawer(); });
 
-    // Drag a tile onto the canvas: Gridstack drops a copy; swap it for a real block.
     GridStack.setupDragIn('#add-drawer .add-tile', { appendTo: 'body', helper: 'clone' });
     grid.on('dropped', (_e, _prev, node) => {
       if (!node || !node.el) return;
@@ -902,15 +1687,13 @@
       const type = dropped.dataset.widgetType;
       grid.removeWidget(dropped, true, false);
       const item = addBlock(type, null, { x, y }, { focus: true });
-      if (item) afterAdd(item, type);
+      if (item) afterAdd(item);
     });
-
-    // …or click it.
     $('#add-groups').addEventListener('click', (e) => {
       const tile = e.target.closest('.add-tile');
       if (!tile) return;
       const item = addBlock(tile.dataset.widgetType, null, null, { focus: true });
-      if (item) afterAdd(item, tile.dataset.widgetType);
+      if (item) afterAdd(item);
     });
     $('#add-groups').addEventListener('keydown', (e) => {
       const tile = e.target.closest('.add-tile');
@@ -918,116 +1701,8 @@
     });
   }
 
-  /* ---------------- ⚙ block settings (one dialog for every block type) ---------------- */
-
-  let settingsItem = null;
-
-  function linkOptions(field) {
-    const opts = [];
-    if (field.allowNone) opts.push(['', field.allowNone]);
-    else opts.push(['', '— Choose a page —']);
-    for (const p of store.config.pages) opts.push([p.file, `📄 ${p.title}`]);
-    for (const p of F.sortedPosts(store.config)) opts.push([p.file, `📰 ${p.title}`]);
-    opts.push(['__external__', '🌐 Another website…']);
-    return opts;
-  }
-
-  function openBlockSettings(item) {
-    const type = item.dataset.widgetType;
-    const ed = EDITORS[type];
-    if (!ed.settings) return;
-    settingsItem = item;
-    const data = ed.read(editorOf(item));
-    $('#block-settings-title').textContent = `${ed.label} settings`;
-    const box = $('#block-settings-fields');
-    box.innerHTML = '';
-
-    for (const f of ed.settings) {
-      if (f.type === 'note') { box.appendChild(el('p', 'settings-note', f.text)); continue; }
-      const row = el('div', 'settings-field');
-      const id = `bs-${f.key}`;
-      const label = el('label', 'settings-field__label', f.label);
-      label.htmlFor = id;
-      row.appendChild(label);
-      const value = data[f.key] == null ? '' : String(data[f.key]);
-
-      if (f.type === 'text') {
-        const input = el('input', 'settings-field__input');
-        input.id = id; input.type = 'text'; input.value = value; input.dataset.key = f.key;
-        if (f.placeholder) input.placeholder = f.placeholder;
-        row.appendChild(input);
-      } else if (f.type === 'select') {
-        const sel = el('select', 'settings-field__input');
-        sel.id = id; sel.dataset.key = f.key;
-        for (const [v, t] of f.options) { const o = el('option', '', t); o.value = v; sel.appendChild(o); }
-        sel.value = value;
-        row.appendChild(sel);
-      } else if (f.type === 'link') {
-        const sel = el('select', 'settings-field__input');
-        sel.id = id; sel.dataset.key = f.key; sel.dataset.link = '1';
-        for (const [v, t] of linkOptions(f)) { const o = el('option', '', t); o.value = v; sel.appendChild(o); }
-        const internal = !value || store.docs[value];
-        sel.value = internal ? value : '__external__';
-        const ext = el('input', 'settings-field__input settings-field__external');
-        ext.type = 'url';
-        ext.placeholder = 'https://www.example.com';
-        ext.value = internal ? '' : value;
-        ext.hidden = internal;
-        sel.addEventListener('change', () => { ext.hidden = sel.value !== '__external__'; if (!ext.hidden) ext.focus(); });
-        row.append(sel, ext);
-      } else if (f.type === 'code') {
-        if (f.warning) {
-          const warn = el('div', 'settings-warning');
-          warn.innerHTML = '<strong>⚠️ Careful</strong>';
-          warn.appendChild(el('span', '', f.warning));
-          row.insertBefore(warn, label);
-        }
-        const ta = el('textarea', 'settings-field__input settings-field__code');
-        ta.id = id; ta.dataset.key = f.key; ta.value = value; ta.rows = 10; ta.spellcheck = false;
-        ta.placeholder = '<iframe src="…"></iframe>';
-        row.appendChild(ta);
-      }
-      box.appendChild(row);
-    }
-    $('#block-settings').showModal();
-    const first = box.querySelector('input, select, textarea');
-    if (first) first.focus();
-  }
-
-  function applyBlockSettings() {
-    const item = settingsItem;
-    settingsItem = null;
-    if (!item || !item.isConnected) return;
-    const ed = EDITORS[item.dataset.widgetType];
-    const node = editorOf(item);
-    const data = ed.read(node);
-    document.querySelectorAll('#block-settings-fields [data-key]').forEach((input) => {
-      let v = input.value;
-      if (input.dataset.link) {
-        if (v === '__external__') {
-          v = input.parentElement.querySelector('.settings-field__external').value.trim();
-          if (v && !/^(https?:|mailto:|tel:)/i.test(v)) v = 'https://' + v;
-          v = F.safeUrl(v, 'link');
-        }
-      }
-      data[input.dataset.key] = input.dataset.key === 'limit' ? parseInt(v, 10) : v;
-    });
-    node._data = { ...node._data, ...data };
-    node._render();
-    markDirty();
-  }
-
-  function wireBlockSettings() {
-    $('#block-settings-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const save = e.submitter && e.submitter.value === 'save';
-      $('#block-settings').close();
-      if (save) applyBlockSettings(); else settingsItem = null;
-    });
-  }
-
   /* ========================================================================
-     9. SAVE DRAFT & PUBLISH LIVE
+     12. SAVE DRAFT & PUBLISH LIVE
      ======================================================================== */
 
   let isBusy = false;
@@ -1052,31 +1727,23 @@
     return `Sorry, ${action} didn't work. Your changes are kept on this computer. Please try again in a moment.`;
   }
 
-  /** A friendly commit message for one file. */
   function commitMessage(path, isNew) {
     const meta = docMeta(path);
-    if (meta) {
-      const what = postMeta(path) ? 'blog post' : 'page';
-      return `${isNew ? 'Add' : 'Update'} ${what} “${meta.title}”`;
-    }
+    if (meta) return `${isNew ? 'Add' : 'Update'} ${postMeta(path) ? 'blog post' : 'page'} “${meta.title}”`;
     return {
       'site-config.json': 'Update site settings',
       'global.css': 'Update site design',
       'theme.css': 'Update custom styles',
-      'header.html': 'Update the top of every page',
-      'footer.html': 'Update the bottom of every page',
+      'header.html': 'Update the header',
+      'footer.html': 'Update the footer',
     }[path] || `Update ${path}`;
   }
 
-  /** Commit every changed file to the draft branch. */
   async function commitChangesToDraft() {
     flushCanvas();
     const changes = pendingChanges();
     for (const ch of changes) {
-      const result = await service.commitFile(ch.path, ch.content, {
-        message: commitMessage(ch.path, !ch.remote),
-        sha: ch.remote ? ch.remote.sha : undefined,
-      });
+      const result = await service.commitFile(ch.path, ch.content, { message: commitMessage(ch.path, !ch.remote), sha: ch.remote ? ch.remote.sha : undefined });
       store.remote.set(ch.path, { content: ch.content, sha: result.sha });
     }
     if (changes.length) {
@@ -1158,7 +1825,6 @@
     });
   }
 
-  /** After a forced publish, re-read the files' SHAs from the draft branch. */
   async function refreshRemoteFiles() {
     const paths = Array.from(store.remote.keys());
     await Promise.all(paths.map(async (path) => {
@@ -1173,12 +1839,13 @@
 
   function showPublishDone(files) {
     const rows = [];
+    const added = new Set(files.filter((f) => f.status === 'added').map((f) => f.path));
     const paths = files.filter((f) => f.status !== 'removed').map((f) => f.path);
     for (const path of paths) {
       const meta = docMeta(path);
-      if (meta) rows.push(`${postMeta(path) ? '📰' : '📄'} ${F.escapeHtml(meta.title)}${store.livePaths.has(path) && !files.find((f) => f.path === path && f.status === 'added') ? '' : ' <span class="tag">new</span>'}`);
+      if (meta) rows.push(`${postMeta(path) ? '📰' : '📄'} ${F.escapeHtml(meta.title)}${added.has(path) ? ' <span class="tag">new</span>' : ''}`);
     }
-    if (paths.some((p) => p === 'header.html' || p === 'footer.html')) rows.push('⬆⬇ Top and bottom of your pages');
+    if (paths.some((p) => p === 'header.html' || p === 'footer.html')) rows.push('⬆⬇ Header and footer');
     if (paths.some((p) => p === 'global.css' || p === 'theme.css')) rows.push('🎨 Your website’s look');
     const photos = files.filter((f) => f.path.startsWith(service.imageDir + '/') && f.status === 'added').length;
     if (photos) rows.push(`🖼️ ${photos} new photo${photos > 1 ? 's' : ''}`);
@@ -1192,7 +1859,7 @@
   }
 
   /* ========================================================================
-     10. PHOTOS — upload + library
+     13. PHOTOS
      ======================================================================== */
 
   function resizeImage(file, maxSide) {
@@ -1329,8 +1996,7 @@
   }
 
   /* ========================================================================
-     11. PREVIEW — the real stitched page, in a sandboxed frame
-     (no scripts run in it, so custom code can't reach the editor)
+     14. PREVIEW — the real stitched page in a sandboxed frame (no scripts)
      ======================================================================== */
 
   function wirePreview() {
@@ -1343,8 +2009,8 @@
       if (!files[file]) file = 'index.html';
       previewFile = file;
       const doc = store.docs[file];
-      const css = F.globalCss(store.config.theme, store.baseCss) + '\n' + (store.customCss || '');
-      const config = JSON.parse(files['site-config.json']); // with automatic summaries filled in
+      const css = F.globalCss(store.config.theme, store.baseCss, store.config.typography) + '\n' + (store.customCss || '');
+      const config = JSON.parse(files['site-config.json']);
       frame.srcdoc = F.stitchPage({ file, kind: doc.kind, blocks: doc.blocks },
         { config, header: store.docs['header.html'].blocks, footer: store.docs['footer.html'].blocks }, { inlineCss: css });
     };
@@ -1384,7 +2050,7 @@
   }
 
   /* ========================================================================
-     12. UI WIRING
+     15. UI WIRING
      ======================================================================== */
 
   let toastTimer = null;
@@ -1415,130 +2081,27 @@
     back.hidden = false;
   }
 
-  /* ---------------- sidebar: the website's structure ---------------- */
-
-  function renderSidebar() {
-    const pendingPaths = new Set(lastPending.map((p) => p.path));
-    const item = (file, icon, label, extra = '') => {
-      const btn = el('button', 'page-item' + (file === store.current ? ' is-current' : ''));
-      btn.type = 'button';
-      btn.dataset.file = file;
-      if (file === store.current) btn.setAttribute('aria-current', 'page');
-      btn.appendChild(el('span', 'page-item__icon', icon));
-      const name = el('span', 'page-item__name', label);
-      btn.appendChild(name);
-      if (extra) btn.insertAdjacentHTML('beforeend', extra);
-      if (pendingPaths.has(file)) btn.insertAdjacentHTML('beforeend', '<span class="page-item__dot" title="Changes not saved yet"></span>');
-      if (!store.livePaths.has(file)) btn.insertAdjacentHTML('beforeend', '<span class="page-item__badge" title="Not on your website yet">New</span>');
-      const li = el('li');
-      li.appendChild(btn);
-      return li;
-    };
-
-    const pages = $('#page-list');
-    pages.innerHTML = '';
-    for (const p of store.config.pages) {
-      pages.appendChild(item(p.file, p.file === 'index.html' ? '🏠' : '📄', p.title,
-        p.showInNavbar ? '' : '<span class="page-item__hidden" title="Not shown in the website menu">hidden</span>'));
-    }
-
-    const posts = $('#post-list');
-    posts.innerHTML = '';
-    for (const p of F.sortedPosts(store.config)) {
-      const li = item(p.file, '📰', p.title);
-      li.querySelector('.page-item__name').insertAdjacentHTML('beforeend', `<small class="page-item__date">${F.escapeHtml(F.formatDate(p.date))}</small>`);
-      posts.appendChild(li);
-    }
-    $('#posts-empty').hidden = store.config.posts.length > 0;
-
-    const regions = $('#region-list');
-    regions.innerHTML = '';
-    regions.appendChild(item('header.html', '⬆️', 'Top of every page'));
-    regions.appendChild(item('footer.html', '⬇️', 'Bottom of every page'));
-  }
-
-  /* ---------------- text style bar ---------------- */
-
-  function activeTextEditor() {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return null;
-    const node = sel.anchorNode;
-    const e = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
-    return e ? e.closest('.text-editor') : null;
-  }
-
-  const FORMAT_COMMANDS = {
-    title: () => document.execCommand('formatBlock', false, 'h2'),
-    subtitle: () => document.execCommand('formatBlock', false, 'h3'),
-    normal: () => document.execCommand('formatBlock', false, 'p'),
-    bold: () => document.execCommand('bold'),
-    italic: () => document.execCommand('italic'),
-    list: () => document.execCommand('insertUnorderedList'),
-    link: () => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) { showToast('First select (highlight) the words you want to turn into a link.'); return; }
-      const range = sel.getRangeAt(0);
-      let url = window.prompt('Paste the website address for this link (or a page, like about.html):', 'https://');
-      if (!url || url === 'https://') return;
-      url = url.trim();
-      if (!/^(https?:|mailto:|#|\/)/i.test(url) && !/^(blog\/)?[a-z0-9-]+\.html$/i.test(url)) url = 'https://' + url;
-      sel.removeAllRanges();
-      sel.addRange(range);
-      document.execCommand('createLink', false, F.safeUrl(url, 'link'));
-    },
-  };
-
-  function updateFormatBar() {
-    const bar = $('#formatbar');
-    const editor = activeTextEditor();
-    bar.classList.toggle('is-active', !!editor);
-    let block = '';
-    try { block = editor ? String(document.queryCommandValue('formatBlock')).toLowerCase() : ''; } catch { /* ignore */ }
-    const states = { bold: 'bold', italic: 'italic', list: 'insertUnorderedList' };
-    bar.querySelectorAll('button[data-cmd]').forEach((btn) => {
-      const cmd = btn.dataset.cmd;
-      let on = false;
-      if (editor && states[cmd]) { try { on = document.queryCommandState(states[cmd]); } catch { /* ignore */ } }
-      if (editor && cmd === 'title') on = block === 'h2';
-      if (editor && cmd === 'subtitle') on = block === 'h3';
-      btn.classList.toggle('is-on', on);
-    });
-  }
-
-  function wireFormatBar() {
-    const bar = $('#formatbar');
-    bar.addEventListener('mousedown', (e) => { if (e.target.closest('button[data-cmd]')) e.preventDefault(); });
-    bar.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-cmd]');
-      if (!btn) return;
-      const editor = activeTextEditor();
-      if (!editor) { showToast('First click inside a text box, then choose a style.'); return; }
-      FORMAT_COMMANDS[btn.dataset.cmd]();
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
-      updateFormatBar();
-    });
-    document.addEventListener('selectionchange', updateFormatBar);
-    try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch { /* ignore */ }
-  }
-
   /* ---------------- new page / new post dialog ---------------- */
+
+  function openNewDocDialog(mode) {
+    const dialog = $('#newpage-dialog');
+    const input = $('#newpage-name');
+    dialog.dataset.mode = mode;
+    $('#newpage-heading').textContent = mode === 'post' ? 'Write a new blog post' : 'Add a new page';
+    $('#newpage-label').textContent = mode === 'post' ? 'What is your post called?' : 'What should the page be called?';
+    input.placeholder = mode === 'post' ? 'For example: My first tomatoes' : 'For example: My recipes';
+    $('#newpage-create').textContent = mode === 'post' ? 'Start writing' : 'Create page';
+    $('#newpage-where').hidden = mode === 'post';
+    $('#newpage-in-menu').checked = true;
+    input.value = '';
+    $('#newpage-file').textContent = '…';
+    dialog.showModal();
+    input.focus();
+  }
 
   function wireNewDocDialog() {
     const dialog = $('#newpage-dialog');
     const input = $('#newpage-name');
-    const open = (mode) => {
-      dialog.dataset.mode = mode;
-      $('#newpage-heading').textContent = mode === 'post' ? 'Write a new blog post' : 'Add a new page';
-      $('#newpage-label').textContent = mode === 'post' ? 'What is your post called?' : 'What should the page be called?';
-      input.placeholder = mode === 'post' ? 'For example: My first tomatoes' : 'For example: My recipes';
-      $('#newpage-create').textContent = mode === 'post' ? 'Start writing' : 'Create page';
-      input.value = '';
-      $('#newpage-file').textContent = '…';
-      dialog.showModal();
-      input.focus();
-    };
-    $('#btn-add-page').addEventListener('click', () => open('page'));
-    $('#btn-add-post').addEventListener('click', () => open('post'));
     input.addEventListener('input', () => {
       const post = dialog.dataset.mode === 'post';
       $('#newpage-file').textContent = input.value.trim() ? uniqueFile(F.slugify(input.value, post ? 'post' : 'page'), post ? 'blog/' : '') : '…';
@@ -1548,60 +2111,10 @@
       const create = e.submitter && e.submitter.value === 'create';
       dialog.close();
       if (!create) return;
-      if (dialog.dataset.mode === 'post') createPost(input.value); else createPage(input.value);
+      if (dialog.dataset.mode === 'post') createPost(input.value);
+      else createPage(input.value, $('#newpage-in-menu').checked);
     });
   }
-
-  /* ---------------- page & post settings panels ---------------- */
-
-  function wireDocPanels() {
-    $('#page-title').addEventListener('input', (e) => {
-      const meta = docMeta(store.current);
-      if (!meta) return;
-      meta.title = e.target.value.trim() || F.nameFromFile(store.current);
-      refreshLiveBlocks();
-      renderRegionPreviews();
-      markDirty();
-    });
-
-    $('#page-in-menu').addEventListener('change', (e) => {
-      const meta = pageMeta(store.current);
-      if (!meta) return;
-      meta.showInNavbar = e.target.checked;
-      renderRegionPreviews();
-      markDirty();
-      showToast(e.target.checked ? 'This page now has a link in your website menu.' : 'This page is hidden from your website menu. It’s still on your website.');
-    });
-
-    $('#post-date').addEventListener('change', (e) => {
-      const meta = postMeta(store.current);
-      if (meta && /^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) { meta.date = e.target.value; renderRegionPreviews(); markDirty(); }
-    });
-    $('#post-excerpt').addEventListener('input', (e) => {
-      const meta = postMeta(store.current);
-      if (!meta) return;
-      meta.excerpt = e.target.value.trim();
-      meta.excerptAuto = !meta.excerpt;
-      markDirty();
-    });
-    $('#post-cover').addEventListener('click', () => {
-      const meta = postMeta(store.current);
-      openMediaLibrary({ current: meta.thumbnail, onPick: (path) => { meta.thumbnail = path; renderCoverPicker(); renderRegionPreviews(); markDirty(); } });
-    });
-    $('#post-cover-remove').addEventListener('click', () => {
-      const meta = postMeta(store.current);
-      meta.thumbnail = '';
-      renderCoverPicker();
-      renderRegionPreviews();
-      markDirty();
-    });
-
-    // Clicking the header/footer preview around a page opens it for editing.
-    $('#preview-header').addEventListener('click', () => openDoc('header.html'));
-    $('#preview-footer').addEventListener('click', () => openDoc('footer.html'));
-  }
-
-  /* ---------------- more options ---------------- */
 
   function wireAdvanced() {
     $('#btn-download').addEventListener('click', () => {
@@ -1625,14 +2138,13 @@
   }
 
   function wireUi() {
-    wireFormatBar();
+    wireToolbar();
     wireDrawer();
-    wireBlockSettings();
+    wireSidebar();
     wireSettings();
     wirePreview();
     wireMediaLibrary();
     wireNewDocDialog();
-    wireDocPanels();
     wireAdvanced();
 
     $('#btn-save').addEventListener('click', saveDraft);
@@ -1641,31 +2153,47 @@
       d.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => d.close()));
     });
 
-    document.querySelector('.sidebar').addEventListener('click', (e) => {
-      const btn = e.target.closest('.page-item');
-      if (btn && btn.dataset.file !== store.current) openDoc(btn.dataset.file);
+    $('#page-title').addEventListener('input', (e) => {
+      const meta = docMeta(store.current);
+      if (!meta) return;
+      meta.title = e.target.value.trim() || F.nameFromFile(store.current);
+      refreshLiveBlocks();
+      renderRegionPreviews();
+      markDirty();
     });
+    $('#page-title').addEventListener('change', renderSidebar);
 
+    // Selecting a box: click anywhere on it. Clicking the empty page: nothing selected.
+    canvasEl().addEventListener('mousedown', (e) => {
+      const item = e.target.closest('.grid-stack-item');
+      if (item) selectBlock(item);
+    }, true);
+    canvasEl().addEventListener('focusin', (e) => {
+      const item = e.target.closest('.grid-stack-item');
+      if (item) selectBlock(item);
+    });
+    $('#paper').addEventListener('mousedown', (e) => {
+      if (!e.target.closest('.grid-stack-item') && !e.target.closest('.region-preview')) selectBlock(null);
+    });
     canvasEl().addEventListener('click', (e) => {
       const del = e.target.closest('.block-delete');
-      if (del) { removeBlock(del.closest('.grid-stack-item')); return; }
-      const set = e.target.closest('.block-settings');
-      if (set) { openBlockSettings(set.closest('.grid-stack-item')); return; }
-      const embed = e.target.closest('.embed-editor');
-      if (embed) openBlockSettings(embed.closest('.grid-stack-item'));
+      if (del) removeBlock(del.closest('.grid-stack-item'));
     });
     canvasEl().addEventListener('input', markDirty);
 
+    $('#preview-header').addEventListener('click', () => openDoc('header.html'));
+    $('#preview-footer').addEventListener('click', () => openDoc('footer.html'));
+
     grid.on('change added removed', () => { markDirty(); refreshEmptyState(); });
     const paper = $('#paper');
-    grid.on('dragstart resizestart', () => paper.classList.add('is-arranging'));
+    grid.on('dragstart resizestart', () => { paper.classList.add('is-arranging'); hideToolbar(); });
     grid.on('dragstop resizestop', () => paper.classList.remove('is-arranging'));
 
     window.addEventListener('beforeunload', () => { if (saveTimer) flushSave(); });
   }
 
   /* ========================================================================
-     13. BOOT
+     16. BOOT
      ======================================================================== */
 
   function createService() {
@@ -1681,7 +2209,6 @@
     });
   }
 
-  /** Files Pebble reads and writes in the repository. */
   const isSiteFile = (path) => F.PAGE_FILE_RE.test(path) || F.POST_FILE_RE.test(path) ||
     ['site-config.json', 'global.css', 'theme.css'].includes(path);
 
@@ -1697,7 +2224,7 @@
       column: F.COLUMNS,
       cellHeight: CONFIG.cellHeight,
       margin: F.DEFAULT_THEME.blockSpacing / 2,
-      float: true,                     // free-form: blocks stay where they're dropped
+      float: true,
       minRow: CONFIG.minRows.page,
       handle: '.block-handle',
       acceptWidgets: '.add-tile',
@@ -1716,7 +2243,6 @@
       $('#repo-name').textContent = service.fullName + (service.isDemo ? ' (practice)' : '');
       store.baseCss = await fetch(CONFIG.baseCssUrl, { cache: 'no-cache' }).then((r) => r.text());
 
-      // Where GitHub Pages publishes from.
       const publishing = await service.getPublishingInfo().catch((err) => { if (err.status === 401) throw err; return null; });
       if (publishing && publishing.path && publishing.path !== '/') {
         showBlocked('This website is set up in a way Pebble can’t edit yet.');
@@ -1727,7 +2253,6 @@
       if (publishing && publishing.url) service.publishedUrl = publishing.url;
       if (service.draftBranch === service.liveBranch) service.draftBranch = 'pebble-draft';
 
-      // Read the website: draft if there is one, otherwise live.
       store.hasDraftBranch = await service.hasDraft();
       const [diff] = await Promise.all([service.compareDraftToLive(), loadRemoteFiles(readRef())]);
       store.draftAhead = diff.ahead;
@@ -1738,7 +2263,6 @@
         store.livePaths = new Set(store.remote.keys());
       }
 
-      // Safety: only open websites Pebble made.
       const home = store.remote.get('index.html');
       if (home && !F.isPebblePage(home.content)) {
         showBlocked('This website wasn’t made with Pebble, so Pebble won’t change it.');
@@ -1747,7 +2271,8 @@
 
       const site = buildSiteFromRemote();
       const local = loadLocal();
-      if (local && local.config && local.docs) {
+      const hadLocal = !!(local && local.config && local.docs);
+      if (hadLocal) {
         site.config = F.normalizeConfig(local.config);
         site.docs = local.docs;
         site.customCss = local.customCss || '';
@@ -1768,6 +2293,9 @@
       flushSave();
       if (store.upgraded) {
         showToast('Pebble has new features! Your website was updated to use them — press “Publish live” once to put it online.');
+      } else if (!hadLocal && lastPending.length && lastPending.every((p) => ['global.css', 'site-config.json'].includes(p.path))) {
+        // Only Pebble's own files differ: this website was made by an earlier Pebble.
+        showToast('Pebble has new design options (text styles, fonts). Press “Publish live” once to update your website.');
       }
     } catch (err) {
       console.error('Pebble: could not open the website', err);
@@ -1778,7 +2306,6 @@
     }
   }
 
-  /** Turn the repository's files into the site data (upgrading older sites). */
   function buildSiteFromRemote() {
     const cfgFile = store.remote.get('site-config.json');
     if (cfgFile) {
@@ -1801,8 +2328,6 @@
       const theme = store.remote.get('theme.css');
       return { config, docs, customCss: config.customCss && theme ? theme.content : '' };
     }
-
-    // No site-config.json: an empty repository, or a site from an older Pebble.
     const pages = {};
     for (const [path, f] of store.remote) {
       if (F.PAGE_FILE_RE.test(path) && !['header.html', 'footer.html'].includes(path) && F.isPebblePage(f.content)) pages[path] = f.content;
@@ -1812,21 +2337,21 @@
     return F.upgradeLegacySite(pages);
   }
 
-  // Public API (console, tests, future modules).
   window.Pebble = {
     get store() { return store; },
     get service() { return service; },
+    get selected() { return selected; },
     buildFiles,
     pendingChanges,
     openDoc,
     createPage,
     createPost,
+    movePage,
+    selectBlock,
     saveDraft,
     publishLive,
     readCanvas,
-    /** The open page/post as a complete HTML file. */
     serializeToStaticHTML() { const files = buildFiles(); return files[store.current] || files[`${currentKind()}.html`]; },
-    /** Load a Pebble page's blocks into the open doc. */
     deserializeToEditor(html) {
       const blocks = F.parsePage(html, store.current).blocks;
       loadCanvas(blocks, currentKind());
