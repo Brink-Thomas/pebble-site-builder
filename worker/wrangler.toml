@@ -17,6 +17,7 @@ preview_urls = false
 # Client ID of your GitHub OAuth App (not secret).
 GITHUB_CLIENT_ID = "Ov23liM1SZpS5lCcI97P"
 # Origins allowed to call the exchange (where Pebble is hosted), comma-separated.
-ALLOWED_ORIGINS = "https://thomasbrink.be"
+# (thomasbrink.be/pebble-site-builder now redirects to pebble.thomasbrink.be; kept for old links.)
+ALLOWED_ORIGINS = "https://pebble.thomasbrink.be,https://thomasbrink.be"
 # Must equal the OAuth App's callback URL / PEBBLE_CONFIG.redirectUri, comma-separated.
-ALLOWED_REDIRECT_URIS = "https://thomasbrink.be/pebble-site-builder/"
+ALLOWED_REDIRECT_URIS = "https://pebble.thomasbrink.be/,https://thomasbrink.be/pebble-site-builder/"

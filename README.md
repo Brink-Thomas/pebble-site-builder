@@ -36,7 +36,7 @@ example-site/            ← WHAT A USER'S REPOSITORY CONTAINS (see "The website
 ```
 
 `example-site/` also seeds the demo repository on first run, and it is a real,
-working website: <https://thomasbrink.be/pebble-site-builder/example-site/>
+working website: <https://pebble.thomasbrink.be/example-site/>
 
 ## Run it locally
 
@@ -73,7 +73,7 @@ for trying the flow without any credentials.
 1. **Create a GitHub OAuth App**: github.com → Settings → Developer
    settings → OAuth Apps → New OAuth App.
    - Homepage URL and **Authorization callback URL**: where Pebble's start
-     page is hosted, e.g. `https://thomasbrink.be/pebble-site-builder/`
+     page is hosted, e.g. `https://pebble.thomasbrink.be/`
    - Note the **Client ID**, then generate a **client secret**.
 2. **Deploy the token exchange** (free Cloudflare account):
    ```bash
