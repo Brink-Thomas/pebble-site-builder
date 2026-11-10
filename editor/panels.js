@@ -6,7 +6,7 @@
 import { html, useState, useRef, useEffect, useLayoutEffect, S, D, cx, Icon, IconButton } from './lib.js';
 import {
   store, setUi, select, undo, redo, canUndo, canRedo, openDoc, renameDoc, movePage, deleteDoc,
-  addSection, addBlock, deleteNode, setLayout, addColumn, removeColumn, updateBlock, updateSectionStyle, updateColumnStyle,
+  addSection, addBlock, deleteNode, setLayout, addColumn, removeColumn, updateBlock, updateSectionStyle, updateColumnStyle, resizeBlock,
   updateSettings, change, currentKind, currentDoc, moveSectionBy,
 } from './store.js';
 import { EDITORS, allowedHere, LIBRARY_GROUPS } from './blocks.js';
@@ -281,6 +281,8 @@ function BlockInspector({ hit }) {
   const ed = EDITORS[block.type];
   return html`<div>
     <${InspHead} icon=${ed.icon} title=${ed.label} onClose=${() => select(null)} />
+    <${Field} f=${{ type: 'segmented', label: 'Width', help: 'Or drag the bar on the right edge of the block. Two half-width blocks sit side by side.', options: [[3, 'A quarter', null, '¼'], [4, 'A third', null, '⅓'], [6, 'Half', null, '½'], [8, 'Two thirds', null, '⅔'], [9, 'Three quarters', null, '¾'], [12, 'Full width', null, 'Full']] }}
+      value=${block.colSpan || 12} onChange=${(v) => resizeBlock(block.id, v)} />
     ${ed.fields.map((f) => html`<${Field} key=${`${block.id}:${f.key || f.text}`} f=${f} value=${f.key ? block.data[f.key] : undefined}
       onChange=${(v) => updateBlock(block.id, { [f.key]: v }, f.type === 'text' || f.type === 'textarea' || f.type === 'code' || f.type === 'range' ? { coalesce: `field:${block.id}:${f.key}` } : {})} />`)}
     <button type="button" class="insp-remove" onClick=${() => deleteNode(block.id)}><${Icon} name="trash-2" /><span>Remove this block</span></button>

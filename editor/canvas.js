@@ -11,8 +11,8 @@
    bottom of every column (adds a block).
    ========================================================================== */
 
-import { html, useRef, C, D, S, cx, Icon, IconButton } from './lib.js';
-import { store, setUi, select, deleteNode, duplicateNode, moveBlock, moveSection, moveSectionBy, addBlock, openDoc, currentDoc, currentKind } from './store.js';
+import { html, useRef, useState, C, D, S, cx, Icon, IconButton } from './lib.js';
+import { store, setUi, select, deleteNode, duplicateNode, moveBlock, moveSection, moveSectionBy, addBlock, resizeBlock, openDoc, currentDoc, currentKind } from './store.js';
 import { EDITORS } from './blocks.js';
 import { Img, RenderedHtml } from './fields.js';
 
@@ -43,12 +43,17 @@ function setDrop(drop) {
   setUi({ drop });
 }
 
-/** Where in a column a block would land: before the first block whose middle is below the mouse. */
-function indexInColumn(colEl, clientY) {
+/**
+ * Where in a column a block would land. Blocks fill rows left to right, so:
+ * before the first block that is below the mouse, or in the mouse's row and
+ * to the right of it (past its middle).
+ */
+function indexInColumn(colEl, clientX, clientY) {
   const shells = Array.from(colEl.querySelectorAll(':scope > .col-blocks > .block-shell'));
   for (let i = 0; i < shells.length; i++) {
     const r = shells[i].getBoundingClientRect();
-    if (clientY < r.top + r.height / 2) return i;
+    if (clientY < r.top) return i;
+    if (clientY <= r.bottom && (r.width > colEl.clientWidth * 0.9 ? clientY < r.top + r.height / 2 : clientX < r.left + r.width / 2)) return i;
   }
   return shells.length;
 }
@@ -59,13 +64,13 @@ const columnDnd = (column) => ({
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = drag.kind === 'new-block' ? 'copy' : 'move';
-    setDrop({ columnId: column.id, index: indexInColumn(e.currentTarget, e.clientY) });
+    setDrop({ columnId: column.id, index: indexInColumn(e.currentTarget, e.clientX, e.clientY) });
   },
   onDrop(e) {
     if (!drag || (drag.kind !== 'block' && drag.kind !== 'new-block')) return;
     e.preventDefault();
     e.stopPropagation();
-    const index = indexInColumn(e.currentTarget, e.clientY);
+    const index = indexInColumn(e.currentTarget, e.clientX, e.clientY);
     const what = drag;
     endDrag();
     if (what.kind === 'block') moveBlock(what.id, column.id, index);
@@ -116,16 +121,79 @@ function AddGap({ index, last }) {
   </div>`;
 }
 
+/* ---------------- resizing: the block's width in the 12-column grid ----------------
+   Dragging the bar on a block's right edge works out how many of the
+   column's 12 grid columns the block now covers, and snaps to the sizes
+   that make sense to her (1/4, 1/3, 1/2, 2/3, 3/4, full). Only when she
+   drags well away from those does it stop at any other whole column. */
+
+export const SNAPS = [3, 4, 6, 8, 9, 12];
+const SIZE_NAMES = { 3: 'A quarter', 4: 'A third', 6: 'Half', 8: 'Two thirds', 9: 'Three quarters', 12: 'Full width' };
+export const sizeName = (span) => SIZE_NAMES[span] || `${Math.round((span / 12) * 100)}%`;
+
+/** The span for a right edge at clientX, for a block whose left edge is at `left`. */
+export function spanAt(grid, left, clientX) {
+  const r = grid.getBoundingClientRect();
+  const gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+  const unit = (r.width + gap) / 12;                 // one grid column + one gap
+  const covered = (clientX - left + gap) / unit;     // how many columns the block would cover
+  let span = SNAPS.reduce((a, b) => (Math.abs(b - covered) < Math.abs(a - covered) ? b : a));
+  if (Math.abs(span - covered) > 0.75) span = Math.round(covered);  // far from every logical size
+  return D.clamp(span, 2, 12);
+}
+
+function ResizeHandle({ block, shellRef }) {
+  const [live, setLive] = useState(null);   // the span shown while dragging
+  const drag = useRef(null);
+  const finish = (e) => {
+    if (!drag.current) return;
+    const { grid } = drag.current;
+    drag.current = null;
+    grid.classList.remove('is-resizing');
+    shellRef.current && shellRef.current.classList.remove('is-resizing');
+    document.body.classList.remove('is-resizing');
+    if (e && e.currentTarget.hasPointerCapture && e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    setLive(null);
+  };
+  return html`<div class="block-resize" role="separator" aria-orientation="vertical" title="Drag to make this block wider or narrower"
+      onMouseDown=${(e) => e.stopPropagation()}
+      onPointerDown=${(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        select(block.id);
+        const grid = shellRef.current.parentElement;          // the column's .col-blocks grid
+        drag.current = { grid };
+        e.currentTarget.setPointerCapture(e.pointerId);         // keep getting moves outside the handle
+        grid.classList.add('is-resizing');
+        shellRef.current.classList.add('is-resizing');
+        document.body.classList.add('is-resizing');
+        setLive(block.colSpan);
+      }}
+      onPointerMove=${(e) => {
+        if (!drag.current) return;
+        const left = shellRef.current.getBoundingClientRect().left;   // re-read: the block may wrap to a new row
+        const span = spanAt(drag.current.grid, left, e.clientX);
+        if (span !== live) setLive(span);
+        resizeBlock(block.id, span);                                   // the tree changes; Preact repaints the width
+      }}
+      onPointerUp=${finish} onPointerCancel=${finish} onLostPointerCapture=${finish}>
+    ${live != null ? html`<span class="block-resize__label">${sizeName(live)}</span>` : null}
+  </div>`;
+}
+
 /* ---------------- blocks ---------------- */
 
-function BlockView({ block, column }) {
+function BlockView({ block, column, dropBefore }) {
   const ed = EDITORS[block.type];
   const ref = useRef(null);
   if (!ed) return null;
   const selected = store.ui.selected === block.id;
   const dragging = store.ui.drag && store.ui.drag.kind === 'block' && store.ui.drag.id === block.id;
   const View = ed.View;
-  return html`<div ref=${ref} class=${cx('block-shell', { 'is-selected': selected, 'is-dragging': dragging })} draggable="false"
+  const span = block.colSpan || 12;
+  return html`<div ref=${ref} class=${cx('block-shell', { 'is-selected': selected, 'is-dragging': dragging, 'drop-before': dropBefore })} draggable="false"
+      style=${`grid-column:span ${span}`}
       onMouseDown=${(e) => { e.stopPropagation(); select(block.id); }}
       onFocusIn=${() => select(block.id)}
       onDragStart=${(e) => { if (e.target !== ref.current) return; startDrag(e, { kind: 'block', id: block.id, from: column.id }); }}
@@ -138,6 +206,7 @@ function BlockView({ block, column }) {
       <${IconButton} icon="trash-2" label="Remove this block" cls="block-bar__btn" onClick=${() => deleteNode(block.id)} />
     </div>
     <${View} block=${block} />
+    <${ResizeHandle} block=${block} shellRef=${ref} />
   </div>`;
 }
 
@@ -152,8 +221,11 @@ function ColumnView({ column, section }) {
   const filled = D.isHex(column.style.bgColor);
   const items = [];
   blocks.forEach((b, i) => {
-    if (dropHere && drop.index === i) items.push(html`<${DropLine} key=${`drop-${i}`} />`);
-    items.push(html`<${BlockView} key=${b.id} block=${b} column=${column} />`);
+    // Dropping before a full-width block: a line above it. Before a narrower
+    // block (which may share a row): a bar on its left edge.
+    const here = dropHere && drop.index === i;
+    if (here && (b.colSpan || 12) === 12) items.push(html`<${DropLine} key=${`drop-${i}`} />`);
+    items.push(html`<${BlockView} key=${b.id} block=${b} column=${column} dropBefore=${here && (b.colSpan || 12) < 12} />`);
   });
   if (dropHere && drop.index === blocks.length) items.push(html`<${DropLine} key="drop-end" />`);
   return html`<div class=${cx('section-column ed-column', { 'section-column--filled': filled, 'is-empty': !blocks.length, 'is-drop': dropHere })}

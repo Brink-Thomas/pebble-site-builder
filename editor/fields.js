@@ -183,7 +183,8 @@ export function Field({ f, value, onChange }) {
     case 'textarea': control = html`<textarea class="insp-input" rows="3" placeholder=${f.placeholder || ''} value=${value || ''} onInput=${(e) => onChange(e.target.value)}></textarea>`; break;
     case 'select': control = html`<select class="insp-input" value=${value == null ? '' : String(value)} onChange=${(e) => onChange(f.number ? Number(e.target.value) : e.target.value)}>
       ${f.options.map(([v, t]) => html`<option value=${v}>${t}</option>`)}</select>`; break;
-    case 'segmented': control = html`<div class="segmented segmented--full">${f.options.map(([v, t, ic]) => html`<button type="button" class=${cx({ 'is-active': value === v })} title=${t} aria-label=${t} onClick=${() => onChange(v)}>${ic ? html`<${Icon} name=${ic} />` : t}</button>`)}</div>`; break;
+    // options: [value, label (tooltip), icon?, short text?]
+    case 'segmented': control = html`<div class="segmented segmented--full">${f.options.map(([v, t, ic, short]) => html`<button type="button" class=${cx({ 'is-active': value === v })} title=${t} aria-label=${t} onClick=${() => onChange(v)}>${ic ? html`<${Icon} name=${ic} />` : (short || t)}</button>`)}</div>`; break;
     case 'link': control = html`<${LinkField} value=${value} onChange=${onChange} allowNone=${f.allowNone} />`; break;
     case 'color': control = html`<${ColorField} value=${value} onChange=${onChange} defaultLabel=${f.defaultLabel} />`; break;
     case 'photo': control = html`<${PhotoField} value=${value} onChange=${onChange} removable=${f.removable} />`; break;

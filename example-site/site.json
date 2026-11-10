@@ -92,6 +92,7 @@
                 {
                   "id": "b_tbraqn1k",
                   "type": "text",
+                  "colSpan": 12,
                   "data": {
                     "html": "<h2>Welcome to my garden diary</h2><p>Hello, and thank you for stopping by! This is where I write about my little vegetable patch, my roses, and everything I learn along the way.</p>"
                   }
@@ -121,6 +122,7 @@
                 {
                   "id": "b_yg2wpfr2",
                   "type": "image",
+                  "colSpan": 12,
                   "data": {
                     "src": "assets/images/garden-sunset.svg",
                     "caption": "The garden at sunset",
@@ -142,6 +144,7 @@
                 {
                   "id": "b_fmylr211",
                   "type": "text",
+                  "colSpan": 12,
                   "data": {
                     "html": "<h3>What I grow</h3><p>I'm not an expert — just curious and happy to share what works (and what doesn't).</p><ul><li>Tomatoes (far too many)</li><li>Courgettes and beans</li><li>Old English roses</li></ul>"
                   }
@@ -171,6 +174,7 @@
                 {
                   "id": "b_1us7s7a1",
                   "type": "text",
+                  "colSpan": 12,
                   "data": {
                     "html": "<h3>Latest from the garden</h3>"
                   }
@@ -187,6 +191,7 @@
                 {
                   "id": "b_1q6frzg5",
                   "type": "button",
+                  "colSpan": 12,
                   "data": {
                     "label": "All blog posts",
                     "href": "blog.html",
@@ -219,6 +224,7 @@
                 {
                   "id": "b_ow1lh2lv",
                   "type": "blog-feed",
+                  "colSpan": 12,
                   "data": {
                     "limit": 3
                   }
@@ -256,6 +262,7 @@
                 {
                   "id": "b_1wyw43n1",
                   "type": "text",
+                  "colSpan": 12,
                   "data": {
                     "html": "<h2>About me</h2><p>I'm a mother of three who finally has time for the garden. For years I only had a few pots on the balcony; now I have a real patch of soil and far too many seed packets.</p><p>I live in a small village with clay soil, cold springs and a lot of slugs.</p>"
                   }
@@ -263,6 +270,7 @@
                 {
                   "id": "b_bjn98w16",
                   "type": "text",
+                  "colSpan": 12,
                   "data": {
                     "html": "<h3>Why I started this blog</h3><p>Mostly to remember what I planted where! But also because the best tips I ever got came from neighbours over the fence. This is my fence.</p>"
                   }
@@ -292,6 +300,7 @@
                 {
                   "id": "b_1jxgr2o1",
                   "type": "card",
+                  "colSpan": 12,
                   "data": {
                     "src": "assets/images/tomatoes.svg",
                     "title": "The vegetable patch",
@@ -315,6 +324,7 @@
                 {
                   "id": "b_1q41z6h1",
                   "type": "card",
+                  "colSpan": 12,
                   "data": {
                     "src": "assets/images/roses.svg",
                     "title": "The roses",
@@ -359,6 +369,7 @@
                 {
                   "id": "b_o1le67le",
                   "type": "text",
+                  "colSpan": 12,
                   "data": {
                     "html": "<h2>Blog</h2><p>Stories from the garden, newest first.</p>"
                   }
@@ -366,6 +377,7 @@
                 {
                   "id": "b_15ku9iid",
                   "type": "blog-feed",
+                  "colSpan": 12,
                   "data": {
                     "limit": 0
                   }
@@ -403,6 +415,7 @@
                 {
                   "id": "b_qz1t8a1k",
                   "type": "text",
+                  "colSpan": 12,
                   "data": {
                     "html": "<h2>Say hello</h2><p>I love hearing from other gardeners. Send me an email at <a href=\"mailto:hello@example.com\">hello@example.com</a> and I'll write back as soon as the weeding is done.</p>"
                   }
@@ -445,6 +458,7 @@
                 {
                   "id": "b_6g8lou33",
                   "type": "text",
+                  "colSpan": 12,
                   "data": {
                     "html": "<p>This spring I tried growing everything from seed on the kitchen windowsill. Some things worked beautifully, others… not so much.</p><h3>What worked</h3><ul><li>Tomatoes: every single seed came up</li><li>Basil, once it was warm enough</li></ul><h3>What didn't</h3><p>Courgettes hate being moved. Next year they go straight into the ground.</p>"
                   }
@@ -461,6 +475,7 @@
                 {
                   "id": "b_1exc6891",
                   "type": "image",
+                  "colSpan": 12,
                   "data": {
                     "src": "assets/images/tomatoes.svg",
                     "caption": "The first tomatoes of the year",
@@ -506,6 +521,7 @@
                 {
                   "id": "b_l5chun1x",
                   "type": "text",
+                  "colSpan": 12,
                   "data": {
                     "html": "<p>Who would have thought: the roses are still flowering in November. The mild autumn kept them going, and the last buds are opening along the fence.</p><p>Time to prune soon — but not before I have enjoyed them a little longer.</p>"
                   }
@@ -513,6 +529,7 @@
                 {
                   "id": "b_og3at5as",
                   "type": "image",
+                  "colSpan": 12,
                   "data": {
                     "src": "assets/images/roses.svg",
                     "caption": "Still flowering in November",
@@ -552,6 +569,7 @@
               {
                 "id": "b_1rqvkrz1",
                 "type": "site-title",
+                "colSpan": 12,
                 "data": {}
               }
             ]
@@ -566,6 +584,7 @@
               {
                 "id": "b_1vigvwm9",
                 "type": "menu",
+                "colSpan": 12,
                 "data": {
                   "align": "right"
                 }
@@ -599,6 +618,7 @@
               {
                 "id": "b_1ori8xa1",
                 "type": "text",
+                "colSpan": 12,
                 "data": {
                   "html": "<p>© 2026 My Garden Diary · Made with Pebble</p>"
                 }

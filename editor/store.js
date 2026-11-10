@@ -256,6 +256,13 @@ export function moveSectionBy(id, dir) {
   moveSection(id, to);
 }
 
+/** Make a block span `span` of its column's 12 grid columns (one undo step per drag). */
+export function resizeBlock(id, span) {
+  const hit = S.find(store.site, cur(), id);
+  if (!hit || hit.kind !== 'block' || hit.node.colSpan === span) return;
+  change((site) => S.setColSpan(site, cur(), id, span), { coalesce: `resize:${id}` });
+}
+
 export const setLayout = (sectionId, key) => change((site) => S.setLayout(site, cur(), sectionId, key));
 export const addColumn = (sectionId) => change((site) => S.addColumn(site, cur(), sectionId));
 export const removeColumn = (columnId) => change((site) => S.removeColumn(site, cur(), columnId));

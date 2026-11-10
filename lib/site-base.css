@@ -12,8 +12,8 @@
      .site-header(--hero)  .site-hero  .site-main  .site-footer  .post-header
      section.page-section(--filled|--light)  .page-section__bg  .page-section__overlay
        .section-columns(--center|--bottom)  [--columns: 70fr 30fr]
-         .section-column(--filled)           [--column-bg]
-           .block  .block-text  .block-image(--cropped)  .block-card(--outline|--shadow|--none)
+         .section-column(--filled)           [--column-bg]  a 12-column grid
+           .block  [grid-column: span 6 = half the column]  .block-text  .block-image(--cropped)  .block-card(--outline|--shadow|--none)
            .block-button  .block-blog-feed  .block-embed  .block-site-title  .block-menu
      .rich-text h1/h2/h3/p/.text-small  .align-*  mark.hl-*
      .site-title__logo  .site-title__name  .site-menu__burger
@@ -80,7 +80,17 @@ img { max-width: 100%; }
 }
 .section-columns--center { align-items: center; }
 .section-columns--bottom { align-items: end; }
-.section-column { min-width: 0; display: flex; flex-direction: column; gap: var(--block-spacing); }
+/* Each column is a 12-column grid: a block spans all 12 (full width) unless
+   it says otherwise (style="grid-column:span 6" = half). Blocks fill a row
+   left to right, then wrap to the next row. */
+.section-column {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--block-spacing);
+  align-content: start;
+}
+.section-column > .block { grid-column: span 12; }
 .section-column--filled { background: var(--column-bg); padding: calc(var(--block-spacing) * 1.5); border-radius: var(--border-radius); align-self: stretch; }
 
 /* "Light text" sections (for dark backgrounds) */
@@ -287,6 +297,7 @@ mark { color: inherit; padding: 0 .12em; border-radius: .2em; background: #fff1a
 
 @media (max-width: 720px) {
   .section-columns { grid-template-columns: minmax(0, 1fr); padding: 0 18px; gap: max(16px, var(--block-spacing)); }
+  .section-column > .block { grid-column: 1 / -1 !important; }   /* phones: every block full width */
   .page-section { padding: 28px 0; }
   .site-main { padding: 0 0 56px; }
   /* Header on phones: name/logo on the left, menu button on the right; the

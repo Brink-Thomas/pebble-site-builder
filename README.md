@@ -125,6 +125,7 @@ comes from one question: *would she understand this without being told?*
 | **Pages are a simple list** | A **New** badge marks a page that isn't on the live website yet, and an orange square marks changes that aren't saved yet. The **+** next to "Main Menu" asks only for a name and shows the web address it will get. |
 | **What you see is what visitors get** | The canvas is drawn with the website's own classes and its own `global.css` and `theme.css`, between the real header and footer, exactly as wide as the live page. **Preview** shows the compiled HTML at computer or phone size (with the phone menu button), and its menu links work. |
 | **Moving things is just dragging** | Hold the dots on a block and drag it: a blue line shows where it will land, in the same column, another column or another section. Sections move the same way, or with the up/down arrows. |
+| **Resizing snaps to sizes that make sense** | A bar on the right edge of the hovered or selected block makes it wider or narrower. It snaps to a quarter, a third, half, two thirds, three quarters or the full width (a label says which), so there's no fiddling with pixels. Two half-width blocks sit side by side. The Inspector has the same choices as buttons (¼ ⅓ ½ ⅔ ¾ Full). On phones every block is full width. |
 | **Tools appear where she is looking** | A block's bar (drag dots with its name, duplicate, trash) shows only on the block under her mouse or the selected one; a section's bar (drag dots, settings, up, down, duplicate, trash) only on the section under her mouse. |
 | **Two ways to do everything** | Drag a Library tile onto a column or just click it. Move a section by dragging it or with the arrows. Pick a photo from the library or drop a photo file onto a photo block. |
 | **Mistakes are cheap** | **Undo** and **Redo** in the top bar (and Ctrl+Z / Ctrl+Shift+Z) for every change. Removing a block, a section or a page shows "… removed. **Undo**". Changing a section from three columns to one never loses blocks: they move into the column that stays. |
@@ -223,13 +224,15 @@ assets/images/*      photos
   header: { sections }, footer: { sections },
 }
 section = { id, style: { bgColor, bgImage, overlayColor, overlayOpacity, tone, valign },
-            columns: [{ id, width, style: { bgColor }, blocks: [{ id, type, data }] }] }
+            columns: [{ id, width, style: { bgColor }, blocks: [{ id, type, colSpan, data }] }] }
 ```
 
 Sections are the top-level wrappers of a page; a section has 1–4 columns side
-by side (widths add up to 100), and blocks stack top to bottom inside a
-column. There are no positions to compute: moving a block is changing its
-index in an array. `normalizeSite()` validates anything read from a file or
+by side (widths add up to 100). Each column is a **12-column CSS grid**: a
+block's `colSpan` (1–12, default 12 = full width) says how many grid columns
+it covers, and blocks fill a row left to right, then wrap. There are no
+positions to compute: moving a block is changing its index in an array, and
+resizing it is changing one number. `normalizeSite()` validates anything read from a file or
 the browser (known block types and fields only, sanitized rich text, safe
 URLs, hex colours, clamped numbers) and keeps a fixed key order, so the same
 site always gives the same `site.json` text.
@@ -265,8 +268,10 @@ Blog-post summaries are filled in from the post's first words. Output:
 </main>
 ```
 
-Layout is plain CSS Grid (columns) and Flexbox (blocks in a column); on
-phones the columns stack and the header keeps the name and a CSS-only menu
+Layout is plain CSS Grid: `.section-columns` for the columns, and in every
+`.section-column` `grid-template-columns: repeat(12, minmax(0, 1fr))`, where a
+narrower block gets `style="grid-column:span 6"`. On phones the columns stack,
+every block is full width, and the header keeps the name and a CSS-only menu
 button side by side. No `data-` attributes, ids or scripts are published.
 
 **Saving** compiles the tree and commits only the files whose text differs
@@ -438,6 +443,14 @@ as-is.
   drop index comes from the middles of the blocks under the mouse, and
   dropping calls `moveBlock()` or, for a Library tile, `addBlock()`. Sections
   and pages in the sidebar work the same way.
+- **Resizing** (`ResizeHandle` in `canvas.js`): on pointer down the handle
+  captures the pointer; every pointer move measures the column's grid (its
+  width and gap), works out how many grid columns the block would cover from
+  its left edge to the mouse, snaps to 3, 4, 6, 8, 9 or 12 (any other whole
+  column only when the mouse is well away from those), and calls
+  `resizeBlock(id, span)`, which sets `colSpan` in the tree. Preact repaints the
+  width at once; the whole drag is one undo step. Pointer events are used,
+  so it works with a mouse, a pen or a finger.
 - **Autosave**: 0.6 s after a change the tree is compiled, compared with the
   repository (that's the orange dots and the status line) and kept in
   `localStorage`, so closing the tab loses nothing.
@@ -482,6 +495,7 @@ Pebble.compile()                     // every file of the website (what Save wou
 Pebble.compileToStaticHTML('about.html')
 const A = await Pebble.actions       // the store's action handlers
 A.addSection(1, 'main')              // a wide + narrow section at index 1
+A.resizeBlock(id, 6)                 // half the column's width
 A.select(id); A.deleteSelected()
 A.undo(); A.redo()
 Pebble.store.pending                 // the files Save draft would write or delete
