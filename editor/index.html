@@ -7,7 +7,7 @@
 
   <!-- Gridstack: the drag-and-drop grid engine (pinned version). -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack.min.css">
-  <!-- editor.css styles the editor "chrome" only (toolbars, outlines, dialogs). -->
+  <!-- editor.css styles the editor "chrome" only (bars, outlines, dialogs). -->
   <link rel="stylesheet" href="editor.css">
   <!-- The website's own design, so the canvas looks like the real site:
        global.css (built live from Site Settings) and the optional theme.css. -->
@@ -17,96 +17,108 @@
 <body class="editor">
 
   <!-- ================================================================
-       TOP BAR
+       TOP BAR — icons everywhere (Lucide); labels hide on small screens
        ================================================================ -->
   <header class="topbar">
-    <div class="brand" aria-label="Pebble"><span class="brand__logo" aria-hidden="true">●</span> Pebble</div>
-    <a class="btn btn--ghost back-link" id="btn-back" href="../">← Your websites</a>
+    <div class="topbar__left">
+      <a class="brand" id="btn-back" href="../" title="Back to your websites">
+        <span class="brand__mark" aria-hidden="true"></span>
+        <span class="brand__name">Pebble</span>
+      </a>
+      <span class="topbar__divider" aria-hidden="true"></span>
+      <span class="crumb" title="What you're changing now"><i data-lucide="pencil-line" class="icon" aria-hidden="true"></i><span id="doc-crumb">…</span></span>
+    </div>
 
-    <!-- The big friendly "+": opens the box library. -->
-    <button type="button" class="btn btn--add" id="btn-add" aria-expanded="false" aria-controls="add-drawer">
-      <span aria-hidden="true">＋</span> Add
-    </button>
+    <div class="topbar__right">
+      <span id="save-status" class="save-status" role="status" aria-live="polite"><span class="save-status__dot" aria-hidden="true"></span><span class="save-status__text"></span></span>
 
-    <label class="page-name">
-      <span class="page-name__label" id="page-title-label">Page name</span>
-      <input id="page-title" type="text" maxlength="140" placeholder="Page name" autocomplete="off">
-    </label>
-
-    <div class="topbar__spacer"></div>
-    <span id="save-status" class="save-status" role="status" aria-live="polite"></span>
-
-    <button id="btn-preview" class="btn btn--ghost" type="button"><span aria-hidden="true">👀</span> Preview</button>
-    <button id="btn-settings" class="btn btn--ghost" type="button"><span aria-hidden="true">🎨</span> Site Settings</button>
-    <button id="btn-save" class="btn btn--secondary" type="button" title="Keep your changes safe. Only you can see them.">
-      <span aria-hidden="true">💾</span> Save draft
-    </button>
-    <button id="btn-publish" class="btn btn--publish" type="button" title="Put your changes on your website for everyone to see">
-      <span aria-hidden="true">🚀</span> Publish live
-    </button>
+      <button id="btn-preview" class="tbtn" type="button" title="See your page as visitors will">
+        <i data-lucide="eye" class="icon" aria-hidden="true"></i><span class="tbtn__label">Preview</span>
+      </button>
+      <button id="btn-settings" class="tbtn" type="button" title="Colors, logo, fonts and spacing of your whole website">
+        <i data-lucide="palette" class="icon" aria-hidden="true"></i><span class="tbtn__label">Site Settings</span>
+      </button>
+      <div class="more">
+        <button id="btn-more" class="tbtn tbtn--icon" type="button" title="More options" aria-label="More options" aria-haspopup="true">
+          <i data-lucide="ellipsis" class="icon" aria-hidden="true"></i>
+        </button>
+        <div class="more-menu" id="more-menu" hidden>
+          <a class="more-menu__item" href="../" id="more-back"><i data-lucide="layout-grid" class="icon" aria-hidden="true"></i><span>Your websites</span></a>
+          <button type="button" class="more-menu__item" id="btn-download"><i data-lucide="download" class="icon" aria-hidden="true"></i><span>Download this page</span></button>
+          <button type="button" class="more-menu__item more-menu__item--danger" id="btn-reset-demo"><i data-lucide="rotate-ccw" class="icon" aria-hidden="true"></i><span>Reset the demo website</span></button>
+          <p class="more-menu__repo">Website files: <code id="repo-name">…</code></p>
+        </div>
+      </div>
+      <span class="topbar__divider" aria-hidden="true"></span>
+      <button id="btn-save" class="tbtn tbtn--outline" type="button" title="Keep your changes safe. Only you can see them.">
+        <i data-lucide="save" class="icon" aria-hidden="true"></i><span class="tbtn__label">Save draft</span>
+      </button>
+      <button id="btn-publish" class="tbtn tbtn--primary" type="button" title="Put your changes on your website for everyone to see">
+        <i data-lucide="send" class="icon" aria-hidden="true"></i><span class="tbtn__label">Publish</span>
+      </button>
+    </div>
   </header>
 
   <div class="workspace">
 
     <!-- ==============================================================
-         SIDEBAR — the website's structure
+         SIDEBAR — two panes that slide: Pages, and the Blog's posts
          ============================================================== -->
-    <aside class="sidebar">
-      <h2 class="sidebar__title">Main Menu</h2>
-      <p class="sidebar__help">Pages with a link in your website menu. Drag to change the order.</p>
-      <ul class="page-list page-list--pages" id="menu-pages" data-list="menu" aria-label="Pages in the main menu"></ul>
+    <aside class="sidebar" id="sidebar" data-pane="pages">
+      <div class="sidebar__track">
 
-      <h2 class="sidebar__title sidebar__title--spaced">Other Pages</h2>
-      <p class="sidebar__help">On your website, but not in the menu.</p>
-      <ul class="page-list page-list--pages" id="other-pages" data-list="other" aria-label="Other pages"></ul>
+        <!-- Pane 1: the website's pages -->
+        <div class="sidebar__pane sidebar__pane--pages" aria-label="Pages">
+          <div class="side-head">
+            <h2 class="side-title">Main Menu</h2>
+            <button type="button" class="ibtn" id="btn-add-page" title="Add a new page" aria-label="Add a new page"><i data-lucide="plus" class="icon" aria-hidden="true"></i></button>
+          </div>
+          <p class="side-help">Pages with a link in your menu. Drag to reorder. Double-click a name to rename it.</p>
+          <ul class="page-list page-list--pages" id="menu-pages" data-list="menu" aria-label="Pages in the main menu"></ul>
 
-      <button type="button" class="add-page" id="btn-add-page"><span aria-hidden="true">＋</span> Add a new page</button>
-      <button type="button" class="add-page add-page--blog" id="btn-start-blog" hidden><span aria-hidden="true">📰</span> Start a blog</button>
+          <div class="side-head side-head--spaced"><h2 class="side-title">Other Pages</h2></div>
+          <p class="side-help">On your website, but not in the menu.</p>
+          <ul class="page-list page-list--pages" id="other-pages" data-list="other" aria-label="Other pages"></ul>
 
-      <h2 class="sidebar__title sidebar__title--spaced">On every page</h2>
-      <ul class="page-list" id="region-list" aria-label="Header and footer"></ul>
+          <button type="button" class="side-add" id="btn-start-blog" hidden><i data-lucide="newspaper" class="icon" aria-hidden="true"></i><span>Start a blog</span></button>
 
-      <div class="tips">
-        <h3>Good to know</h3>
-        <ul>
-          <li>Press <b>＋ Add</b> and drag a box onto your page.</li>
-          <li>Click a box to change its settings on the right.</li>
-          <li>Hold <b>✥ Move</b> to move a box. It stays where you let go.</li>
-          <li><b>Save draft</b> keeps your work safe. Only you can see it.</li>
-          <li><b>Publish live</b> puts it on your website for everyone.</li>
-        </ul>
+          <div class="side-head side-head--spaced"><h2 class="side-title">On every page</h2></div>
+          <ul class="page-list" id="region-list" aria-label="Header and footer"></ul>
+
+          <div class="tips">
+            <h3>Good to know</h3>
+            <ul>
+              <li>Hover over your page and press <b>+</b> to add a section or a block.</li>
+              <li>Click a block or a section to change it on the right.</li>
+              <li>Hold <b>Move</b> on a block to move it, even into another section.</li>
+              <li><b>Save draft</b> keeps your work safe. <b>Publish</b> puts it online.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Pane 2: the blog's posts -->
+        <div class="sidebar__pane sidebar__pane--blog" aria-label="Blog posts">
+          <button type="button" class="side-back" id="btn-blog-back"><i data-lucide="chevron-left" class="icon" aria-hidden="true"></i><span>Back to Pages</span></button>
+          <div class="side-head">
+            <h2 class="side-title side-title--big" id="blog-pane-title">Blog</h2>
+          </div>
+          <div id="blog-page-item"></div>
+          <div class="side-head side-head--spaced"><h2 class="side-title">Posts</h2></div>
+          <button type="button" class="side-add side-add--primary" id="btn-new-post"><i data-lucide="square-pen" class="icon" aria-hidden="true"></i><span>Write a new post</span></button>
+          <ul class="page-list" id="post-list" aria-label="Blog posts"></ul>
+          <p class="side-help" id="posts-empty">No posts yet. Write your first one!</p>
+        </div>
       </div>
-
-      <details class="advanced">
-        <summary>More options</summary>
-        <button type="button" id="btn-download" class="link-btn">Download this page</button>
-        <button type="button" id="btn-reset-demo" class="link-btn link-btn--danger">Reset the demo website</button>
-        <p class="advanced__repo">Website files: <code id="repo-name">…</code></p>
-      </details>
-    </aside>
-
-    <!-- ==============================================================
-         ADD DRAWER — the box library. Slides over the sidebar so the
-         page stays visible: drag a box straight onto it, or click.
-         ============================================================== -->
-    <aside class="add-drawer" id="add-drawer" hidden aria-label="Add a box">
-      <div class="add-drawer__head">
-        <h2>Add to your page</h2>
-        <button type="button" class="add-drawer__close" id="add-close" aria-label="Close">✕</button>
-      </div>
-      <p class="add-drawer__help">Drag a box onto your page, or just click it.</p>
-      <div id="add-groups"></div>
     </aside>
 
     <!-- ==============================================================
          CANVAS
          ============================================================== -->
     <main class="canvas-area">
-
       <div class="paper" id="paper">
         <!-- The top of every page (click to change it) -->
         <div class="region-preview" id="preview-header" title="Click to change the Header (the top of every page)" hidden>
-          <span class="region-preview__label">✏️ Header — click to change it</span>
+          <span class="region-preview__label"><i data-lucide="pencil" class="icon" aria-hidden="true"></i><span>Header — click to change it</span></span>
           <div class="region-preview__content"></div>
         </div>
         <!-- Blog post title & date (from the post details) -->
@@ -115,23 +127,20 @@
         <div class="paper__body">
           <!-- The Header's hero image, shown while editing the Header -->
           <div class="header-hero" id="header-hero" hidden></div>
-          <div class="empty-hint" aria-hidden="true">
-            <p class="empty-hint__big">This part is empty</p>
-            <p>Press <b>＋ Add</b> and drag a box here.</p>
-          </div>
-          <div class="grid-stack" id="canvas"></div>
+          <!-- Rows of sections (pages, posts) or one grid (Header, Footer) -->
+          <div class="canvas" id="canvas"></div>
         </div>
 
         <!-- The bottom of every page -->
         <div class="region-preview region-preview--footer" id="preview-footer" title="Click to change the Footer (the bottom of every page)" hidden>
-          <span class="region-preview__label">✏️ Footer — click to change it</span>
+          <span class="region-preview__label"><i data-lucide="pencil" class="icon" aria-hidden="true"></i><span>Footer — click to change it</span></span>
           <div class="region-preview__content"></div>
         </div>
       </div>
     </main>
 
     <!-- ==============================================================
-         INSPECTOR — settings of the clicked box (or of the page)
+         INSPECTOR — settings of the clicked block, section, or page
          ============================================================== -->
     <aside class="inspector" id="inspector" aria-label="Settings">
       <div class="inspector__body" id="inspector-body"></div>
@@ -140,28 +149,50 @@
 
 
   <!-- ================================================================
+       LIBRARY — opened by the hover "+" buttons on the canvas
+       ================================================================ -->
+  <div class="library" id="library" role="dialog" aria-labelledby="lib-title" hidden data-tab="sections">
+    <div class="library__head">
+      <strong id="lib-title">Add a section</strong>
+      <button type="button" class="ibtn" id="lib-close" title="Close" aria-label="Close"><i data-lucide="x" class="icon" aria-hidden="true"></i></button>
+    </div>
+    <div class="library__tabs" role="tablist">
+      <button type="button" role="tab" data-lib-tab="sections" class="is-active"><i data-lucide="rows-3" class="icon" aria-hidden="true"></i><span>Sections</span></button>
+      <button type="button" role="tab" data-lib-tab="blocks"><i data-lucide="shapes" class="icon" aria-hidden="true"></i><span>Blocks</span></button>
+    </div>
+    <div class="library__panel library__panel--sections">
+      <p class="library__help">A new row with one section, or sections side by side.</p>
+      <div class="lib-layouts" id="lib-sections"></div>
+    </div>
+    <div class="library__panel library__panel--blocks">
+      <p class="library__help">Click a block, or drag it onto any section.</p>
+      <div id="lib-blocks"></div>
+    </div>
+  </div>
+
+  <!-- ================================================================
        FLOATING TEXT TOOLBAR — appears only while she's in a text box
        ================================================================ -->
   <div class="text-toolbar" id="text-toolbar" role="toolbar" aria-label="Text formatting" hidden>
     <select id="tt-style" class="tt-style" aria-label="Text style" title="Text style"></select>
     <span class="tt-sep" aria-hidden="true"></span>
-    <button type="button" data-cmd="bold" title="Bold" aria-label="Bold"><b>B</b></button>
-    <button type="button" data-cmd="italic" title="Italic" aria-label="Italic"><i>I</i></button>
-    <button type="button" data-cmd="underline" title="Underline" aria-label="Underline"><u>U</u></button>
+    <button type="button" data-cmd="bold" title="Bold" aria-label="Bold"><i data-lucide="bold" class="icon" aria-hidden="true"></i></button>
+    <button type="button" data-cmd="italic" title="Italic" aria-label="Italic"><i data-lucide="italic" class="icon" aria-hidden="true"></i></button>
+    <button type="button" data-cmd="underline" title="Underline" aria-label="Underline"><i data-lucide="underline" class="icon" aria-hidden="true"></i></button>
     <div class="tt-hl">
-      <button type="button" data-cmd="highlight" title="Highlight" aria-label="Highlight">🖍️</button>
+      <button type="button" data-cmd="highlight" title="Highlight" aria-label="Highlight"><i data-lucide="highlighter" class="icon" aria-hidden="true"></i></button>
       <div class="tt-palette" id="tt-palette" hidden>
-        <button type="button" class="tt-swatch tt-swatch--none" data-highlight="" title="No highlight" aria-label="No highlight">✕</button>
+        <button type="button" class="tt-swatch tt-swatch--none" data-highlight="" title="No highlight" aria-label="No highlight"><i data-lucide="ban" class="icon" aria-hidden="true"></i></button>
       </div>
     </div>
     <span class="tt-sep" aria-hidden="true"></span>
-      <button type="button" data-align="left" title="Align left" aria-label="Align left"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 6.5h8M2 10h12M2 13.5h8"/></svg></button>
-      <button type="button" data-align="center" title="Center" aria-label="Center"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M4 6.5h8M2 10h12M4 13.5h8"/></svg></button>
-      <button type="button" data-align="right" title="Align right" aria-label="Align right"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M6 6.5h8M2 10h12M6 13.5h8"/></svg></button>
-      <button type="button" data-align="justify" title="Justify (straight edges)" aria-label="Justify (straight edges)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 6.5h12M2 10h12M2 13.5h12"/></svg></button>
+    <button type="button" data-align="left" title="Align left" aria-label="Align left"><i data-lucide="align-left" class="icon" aria-hidden="true"></i></button>
+    <button type="button" data-align="center" title="Center" aria-label="Center"><i data-lucide="align-center" class="icon" aria-hidden="true"></i></button>
+    <button type="button" data-align="right" title="Align right" aria-label="Align right"><i data-lucide="align-right" class="icon" aria-hidden="true"></i></button>
+    <button type="button" data-align="justify" title="Justify (straight edges)" aria-label="Justify"><i data-lucide="align-justify" class="icon" aria-hidden="true"></i></button>
     <span class="tt-sep" aria-hidden="true"></span>
-    <button type="button" data-cmd="list" title="Bullet list" aria-label="Bullet list">• List</button>
-    <button type="button" data-cmd="link" title="Link to another page or website" aria-label="Link">🔗</button>
+    <button type="button" data-cmd="list" title="Bullet list" aria-label="Bullet list"><i data-lucide="list" class="icon" aria-hidden="true"></i></button>
+    <button type="button" data-cmd="link" title="Link to another page or website" aria-label="Link"><i data-lucide="link" class="icon" aria-hidden="true"></i></button>
   </div>
 
   <!-- ================================================================
@@ -169,11 +200,11 @@
        ================================================================ -->
   <dialog id="settings-dialog" class="dialog dialog--side" aria-labelledby="settings-title">
     <div class="dialog__bar">
-      <strong id="settings-title">🎨 Site Settings</strong>
-      <button type="button" class="btn btn--publish btn--small" data-close>Done</button>
+      <strong id="settings-title" class="dialog__title"><i data-lucide="palette" class="icon" aria-hidden="true"></i><span>Site Settings</span></strong>
+      <button type="button" class="tbtn tbtn--primary" data-close><span class="tbtn__label tbtn__label--always">Done</span></button>
     </div>
     <div class="settings-body">
-      <p class="settings-intro">Changes show up right away. They go online when you press <b>Publish live</b>.</p>
+      <p class="settings-intro">Changes show up right away. They go online when you press <b>Publish</b>.</p>
 
       <section class="settings-section">
         <label class="settings-label" for="set-site-name">Website name</label>
@@ -181,17 +212,22 @@
       </section>
 
       <section class="settings-section">
+        <span class="settings-label">Branding <small>logo and browser-tab icon</small></span>
+        <div id="branding" class="branding"></div>
+      </section>
+
+      <section class="settings-section">
         <span class="settings-label">Main color <small>buttons, links, menu</small></span>
-        <div class="swatches" id="swatches-primary"><label class="swatch swatch--custom" title="Pick any color"><input type="color" id="set-primary" aria-label="Pick any main color">＋</label></div>
+        <div class="swatches" id="swatches-primary"><label class="swatch swatch--custom" title="Pick any color"><input type="color" id="set-primary" aria-label="Pick any main color"><i data-lucide="pipette" class="icon" aria-hidden="true"></i></label></div>
       </section>
 
       <section class="settings-section">
         <span class="settings-label">Second color <small>dates, card edges, quotes</small></span>
-        <div class="swatches" id="swatches-secondary"><label class="swatch swatch--custom" title="Pick any color"><input type="color" id="set-secondary" aria-label="Pick any second color">＋</label></div>
+        <div class="swatches" id="swatches-secondary"><label class="swatch swatch--custom" title="Pick any color"><input type="color" id="set-secondary" aria-label="Pick any second color"><i data-lucide="pipette" class="icon" aria-hidden="true"></i></label></div>
       </section>
 
       <section class="settings-section">
-        <label class="settings-label" for="set-font">Letters <small>the font for your whole website</small></label>
+        <label class="settings-label" for="set-font">Website font <small>used by every text style set to “Website font”</small></label>
         <select class="settings-input" id="set-font"></select>
         <div class="custom-font">
           <label class="settings-sublabel" for="set-custom-font">Use a custom font</label>
@@ -206,18 +242,18 @@
       </section>
 
       <section class="settings-section">
-        <span class="settings-label">Text styles <small>the choices in the text toolbar</small></span>
+        <span class="settings-label">Text styles <small>font, size and boldness of each style</small></span>
         <div id="text-styles"></div>
       </section>
 
       <section class="settings-section">
-        <label class="settings-label" for="set-radius">Roundness</label>
+        <div class="settings-labelrow"><label class="settings-label" for="set-radius">Roundness</label><output class="settings-out" id="out-radius">0 px</output></div>
         <input type="range" id="set-radius" min="0" max="32" step="1" class="settings-range">
         <div class="range-labels"><span>Square</span><span>Round</span></div>
       </section>
 
       <section class="settings-section">
-        <label class="settings-label" for="set-spacing">Spacing</label>
+        <div class="settings-labelrow"><label class="settings-label" for="set-spacing">Spacing</label><output class="settings-out" id="out-spacing">0 px</output></div>
         <input type="range" id="set-spacing" min="8" max="40" step="2" class="settings-range">
         <div class="range-labels"><span>Snug</span><span>Airy</span></div>
       </section>
@@ -226,7 +262,7 @@
       <details class="settings-advanced">
         <summary>Advanced</summary>
         <div class="settings-warning">
-          <strong>⚠️ For website helpers</strong>
+          <strong><i data-lucide="triangle-alert" class="icon" aria-hidden="true"></i><span>For website helpers</span></strong>
           <span>Extra design code (CSS) for your website, saved as <code>theme.css</code>. Mistakes here can make your website look broken. If you’re not sure, leave this empty.</span>
         </div>
         <textarea id="set-custom-css" class="settings-code" rows="10" spellcheck="false" placeholder=".block-card { box-shadow: none; }"></textarea>
@@ -239,10 +275,10 @@
   <!-- PREVIEW — the real stitched page. sandbox: no scripts run in it. -->
   <dialog id="preview-dialog" class="dialog dialog--preview">
     <div class="dialog__bar">
-      <strong>This is how visitors will see your page</strong>
+      <strong class="dialog__title"><i data-lucide="eye" class="icon" aria-hidden="true"></i><span>How visitors see your page</span></strong>
       <div class="segmented" role="group" aria-label="Screen size">
-        <button type="button" data-device="desktop" class="is-active">💻 Computer</button>
-        <button type="button" data-device="phone">📱 Phone</button>
+        <button type="button" data-device="desktop" class="is-active" title="Computer"><i data-lucide="monitor" class="icon" aria-hidden="true"></i><span>Computer</span></button>
+        <button type="button" data-device="phone" title="Phone"><i data-lucide="smartphone" class="icon" aria-hidden="true"></i><span>Phone</span></button>
       </div>
       <button type="button" class="btn btn--secondary" data-close>Back to editing</button>
     </div>
@@ -253,7 +289,7 @@
 
   <dialog id="publish-dialog" class="dialog dialog--small">
     <div class="publish-done">
-      <div class="publish-done__icon" aria-hidden="true">🎉</div>
+      <div class="publish-done__icon" aria-hidden="true"><i data-lucide="circle-check" class="icon icon--xl"></i></div>
       <h2>Your website is live!</h2>
       <p>Everyone can now see:</p>
       <ul class="publish-done__list" id="publish-list"></ul>
@@ -265,7 +301,7 @@
 
   <dialog id="conflict-dialog" class="dialog dialog--small">
     <form method="dialog" class="publish-done">
-      <div class="publish-done__icon" aria-hidden="true">🤔</div>
+      <div class="publish-done__icon publish-done__icon--warn" aria-hidden="true"><i data-lucide="git-compare-arrows" class="icon icon--xl"></i></div>
       <h2>Your website was changed somewhere else</h2>
       <p>Since you started, someone (maybe you, on another computer) changed some of the same pages.</p>
       <p>Do you want to publish what you see here? On the pages you changed, your version will replace theirs.</p>
@@ -294,12 +330,12 @@
   <!-- Photo library -->
   <dialog id="media-dialog" class="dialog dialog--media" aria-labelledby="media-title">
     <div class="dialog__bar">
-      <strong id="media-title">Choose a photo</strong>
+      <strong id="media-title" class="dialog__title"><i data-lucide="images" class="icon" aria-hidden="true"></i><span>Choose a photo</span></strong>
       <button type="button" class="btn btn--secondary" data-close>Cancel</button>
     </div>
     <div class="media-body">
       <div class="media-upload" id="media-upload">
-        <span class="media-upload__icon" aria-hidden="true">📤</span>
+        <span class="media-upload__icon" aria-hidden="true"><i data-lucide="upload" class="icon icon--lg"></i></span>
         <div class="media-upload__text">
           <strong>Add a new photo from your computer</strong>
           <small>or drag a photo here</small>
@@ -316,7 +352,7 @@
     <div class="loading__card">
       <span class="spinner" aria-hidden="true"></span>
       <p class="loading__msg">Opening your website…</p>
-      <a class="btn btn--secondary" id="loading-back" href="../" hidden>← Back to your websites</a>
+      <a class="btn btn--secondary" id="loading-back" href="../" hidden>Back to your websites</a>
     </div>
   </div>
 
@@ -329,6 +365,8 @@
   <input type="file" id="file-css" accept=".css,text/css" hidden>
 
   <script src="https://cdn.jsdelivr.net/npm/gridstack@10.3.1/dist/gridstack-all.js"></script>
+  <!-- Lucide: the one icon set used everywhere in the editor. -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
   <script src="../lib/config.js"></script>
   <script src="../lib/auth.js"></script>
   <script src="../lib/site-format.js"></script>

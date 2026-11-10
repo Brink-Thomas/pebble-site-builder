@@ -2,30 +2,26 @@
    Pebble — editor engine
    --------------------------------------------------------------------------
    The user's website lives in THEIR GitHub repository as plain files (see
-   lib/site-format.js for the exact format). This editor:
+   lib/site-format.js). This editor reads them into plain data (the "site"),
+   lets her edit one doc at a time, and on Save draft / Publish live
+   re-renders every file and commits the ones that changed.
 
-     1. reads every file of the website (GitHubService),
-     2. turns them into plain data — the "site":
-          config (site-config.json), docs (pages, blog posts, Header,
-          Footer: lists of blocks), customCss (theme.css)
-     3. lets her edit one doc at a time on a Gridstack canvas,
-     4. on Save draft / Publish live, re-renders ALL files from the data
-        (PebbleFormat.buildSiteFiles — the stitching engine) and commits the
-        ones whose text changed: to the draft branch (dev), then merges
-        into live (main) for GitHub Pages.
+   Pages and posts are made of ROWS of SECTIONS (1–3 side by side). Every
+   section is its own Gridstack instance; the Header and Footer are a single
+   grid each. Blocks can be dragged between sections.
 
    Sections:
-      1. Setup & small helpers
-      2. Block editors (canvas UI + Inspector fields of each block type)
-      3. Canvas: Gridstack + blocks + selection
+      1. Setup, helpers, icons (Lucide)
+      2. Block editors (canvas UI + Inspector fields)
+      3. Canvas: rows, sections, one Gridstack per section, selection
       4. Site store: remote files, local changes, what needs saving
       5. Docs: open / create pages & posts
-      6. Header/Footer previews around the page, hero image
-      7. Sidebar: Main Menu / Other Pages (drag & drop), nested blog posts
+      6. Header/Footer previews, hero
+      7. Sidebar: Main Menu / Other Pages, rename, blog sub-sidebar
       8. Floating text toolbar
-      9. Inspector (right-hand settings panel)
-     10. Site Settings: colours, fonts, text styles, roundness, spacing
-     11. Add drawer
+      9. Inspector (block / section / page settings)
+     10. Site Settings: colours, branding, fonts, text styles, roundness, spacing
+     11. Library: the hover "+" menu for sections and blocks
      12. Save draft & Publish live
      13. Photos: upload + library
      14. Preview
@@ -37,14 +33,14 @@
   'use strict';
 
   /* ========================================================================
-     1. SETUP & SMALL HELPERS
+     1. SETUP, HELPERS, ICONS
      ======================================================================== */
 
   const F = window.PebbleFormat;
 
   const CONFIG = {
     cellHeight: 70,        // px per grid row (site-base.css: --row-height)
-    minRows: { page: 9, post: 9, header: 1, footer: 2 },
+    minRows: { section: 2, header: 1, footer: 2 },
     demoRepo: { owner: 'demo-user', repo: 'my-garden-blog' },
     maxImageSide: 1600,
     autosaveDelay: 700,
@@ -52,13 +48,39 @@
   };
 
   const $ = (sel) => document.querySelector(sel);
-  const canvasEl = () => $('#canvas');
 
   function el(tag, className, text) {
     const e = document.createElement(tag);
     if (className) e.className = className;
     if (text != null) e.textContent = text;
     return e;
+  }
+
+  /** A Lucide icon placeholder (turned into an SVG automatically). */
+  const icon = (name, cls = '') => `<i data-lucide="${name}" class="icon ${cls}" aria-hidden="true"></i>`;
+  function iconEl(name, cls) {
+    const span = el('span');
+    span.innerHTML = icon(name, cls);
+    return span.firstElementChild;
+  }
+  /** A button with an icon and (optionally) a label. */
+  function iconButton(name, label, cls = '', showLabel = false) {
+    const b = el('button', `ibtn ${cls}`);
+    b.type = 'button';
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    b.innerHTML = icon(name) + (showLabel ? `<span class="ibtn__label">${F.escapeHtml(label)}</span>` : '');
+    return b;
+  }
+  /** Turn every new [data-lucide] placeholder into an SVG (debounced). */
+  let iconQueued = false;
+  function renderIcons() {
+    if (iconQueued || !window.lucide) return;
+    iconQueued = true;
+    requestAnimationFrame(() => {
+      iconQueued = false;
+      try { window.lucide.createIcons({ attrs: { 'stroke-width': 1.75 } }); } catch { /* icons are decoration */ }
+    });
   }
 
   const isBlankText = (node) => !node.textContent.replace(/​/g, '').trim();
@@ -69,7 +91,6 @@
     document.execCommand('insertText', false, text);
   }
 
-  /** A one-line editable field (titles, button text): no Enter, plain paste. */
   function makePlainEditable(node, placeholder, onInput) {
     node.contentEditable = 'true';
     node.spellcheck = true;
@@ -82,7 +103,6 @@
     node.addEventListener('input', () => { refresh(); onInput && onInput(node.textContent.trim()); });
   }
 
-  /** A rich text area (text blocks, card text) — the floating toolbar works on these. */
   function makeRichEditable(node, html, placeholder) {
     node.classList.add('rich-text', 'text-editor');
     node.contentEditable = 'true';
@@ -96,45 +116,53 @@
     return node;
   }
 
-  let service = null;   // GitHubService / MockGitHubService
-  let grid = null;      // GridStack instance
+  let service = null;
   let isLoading = false;
 
   const dashboardUrl = () => PebbleAuth.appRoot + (service && service.isDemo ? '?demo=1' : '');
 
   /* ========================================================================
      2. BLOCK EDITORS
-       create(data) → element (element._data holds the data, element._render() redraws)
-       read(element) → data
-       inspector    → fields for the right-hand settings panel
-     Most editors reuse the published CSS classes, so the canvas looks like
-     the website; Inspector changes redraw the block immediately.
      ======================================================================== */
 
   const previewCtx = () => ({ config: store.config, file: store.current, root: '' });
 
-  function resolveImagesIn(root) {
-    root.querySelectorAll('img').forEach((img) => {
+  /** Put rendered website HTML into the editor, pointing its photos at the
+      repository. Parsed in a <template> first, so the browser never asks for
+      a photo at the wrong address. */
+  function setRenderedHtml(node, html) {
+    const t = document.createElement('template');
+    t.innerHTML = html;
+    t.content.querySelectorAll('img').forEach((img) => {
       const src = img.getAttribute('src');
-      if (src && isRepoPath(src)) showImage(img, src);
+      if (src && isRepoPath(src)) { img.removeAttribute('src'); showImage(img, src); }
     });
+    node.replaceChildren(t.content);
   }
 
   const LINK_FIELD = (key, label, allowNone) => ({ key, label, type: 'link', allowNone });
 
+  function changePhotoButton(onClick) {
+    const b = el('button', 'image-change');
+    b.type = 'button';
+    b.innerHTML = `${icon('refresh-cw')}<span>Change photo</span>`;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
   const EDITORS = {
     text: {
-      label: 'Text', icon: '✍️', hint: 'Stories, titles, lists', size: { w: 6, h: 3 }, min: { w: 2, h: 1 },
+      label: 'Text', icon: 'type', hint: 'Stories, titles, lists', size: { w: 6, h: 3 }, min: { w: 2, h: 1 },
       create(data) { return makeRichEditable(el('div'), data.html, 'Click here and start typing…'); },
       read: (node) => ({ html: isBlankText(node) ? '' : F.sanitizeRichText(node.innerHTML) }),
       inspector: [
         { type: 'note', text: 'Click into the text to type. A toolbar appears with text styles, bold, underline, highlight and alignment.' },
-        { type: 'note', text: 'Change how each text style looks for the whole website in 🎨 Site Settings → Text styles.' },
+        { type: 'note', text: 'How each text style looks is set for the whole website in Site Settings → Text styles.' },
       ],
     },
 
     image: {
-      label: 'Photo', icon: '🖼️', hint: 'A picture', size: { w: 6, h: 5 }, min: { w: 2, h: 2 },
+      label: 'Photo', icon: 'image', hint: 'A picture', size: { w: 6, h: 5 }, min: { w: 2, h: 2 },
       create(data) {
         const wrap = el('div', 'block-image image-editor');
         wrap._data = { ...F.BLOCKS.image.defaults(), ...data, src: F.safeUrl(data.src, 'image') };
@@ -150,11 +178,8 @@
             img.alt = d.alt || d.caption || 'Photo';
             img.draggable = false;
             showImage(img, d.src);
-            const change = el('button', 'image-change', '🔄 Change photo');
-            change.type = 'button';
-            change.addEventListener('click', () => openMediaLibrary({ current: d.src, onPick: use }));
-            media.append(img, change);
-            if (d.href) media.appendChild(el('span', 'image-linkbadge', '🔗 Linked'));
+            media.append(img, changePhotoButton(() => openMediaLibrary({ current: d.src, onPick: use })));
+            if (d.href) { const badge = el('span', 'image-linkbadge'); badge.innerHTML = `${icon('link')}<span>Linked</span>`; media.appendChild(badge); }
             const caption = el('input', 'image-caption');
             caption.type = 'text';
             caption.placeholder = 'Write a caption (optional)';
@@ -180,7 +205,7 @@
     },
 
     card: {
-      label: 'Card', icon: '🗂️', hint: 'Photo, title and text', size: { w: 4, h: 6 }, min: { w: 2, h: 3 },
+      label: 'Card', icon: 'layout-panel-top', hint: 'Photo, title and text', size: { w: 4, h: 6 }, min: { w: 2, h: 3 },
       create(data) {
         const wrap = el('div', 'block-card card-editor');
         wrap._data = { ...F.BLOCKS.card.defaults(), ...data };
@@ -196,14 +221,12 @@
             const img = el('img');
             img.alt = '';
             showImage(img, d.src);
-            const change = el('button', 'image-change', '🔄 Change photo');
-            change.type = 'button';
-            change.addEventListener('click', () => openMediaLibrary({ current: d.src, onPick: use }));
-            media.append(img, change);
+            media.append(img, changePhotoButton(() => openMediaLibrary({ current: d.src, onPick: use })));
           } else {
             media.classList.add('card-editor__nomedia');
-            const add = el('button', 'card-editor__addphoto', '📷 Add a photo');
+            const add = el('button', 'card-editor__addphoto');
             add.type = 'button';
+            add.innerHTML = `${icon('image-plus')}<span>Add a photo</span>`;
             add.addEventListener('click', () => openMediaLibrary({ current: '', onPick: use }));
             media.appendChild(add);
           }
@@ -231,7 +254,7 @@
     },
 
     button: {
-      label: 'Button', icon: '🔘', hint: 'A link to a page', size: { w: 4, h: 1 }, min: { w: 2, h: 1 },
+      label: 'Button', icon: 'mouse-pointer-click', hint: 'A link to a page', size: { w: 4, h: 1 }, min: { w: 2, h: 1 },
       create(data) {
         const wrap = el('div', 'block-button button-editor');
         wrap._data = { ...F.BLOCKS.button.defaults(), ...data };
@@ -242,7 +265,7 @@
           const label = el('span', `block-button__link block-button__link--${d.style}`, d.label);
           makePlainEditable(label, 'Button text', (v) => { wrap._data.label = v; syncInspectorField('label', v); });
           wrap.appendChild(label);
-          if (!d.href) wrap.appendChild(el('span', 'button-editor__hint', '← choose where it goes, on the right'));
+          if (!d.href) wrap.appendChild(el('span', 'button-editor__hint', 'Choose where it goes in the panel on the right'));
         };
         wrap._render();
         return wrap;
@@ -257,17 +280,16 @@
     },
 
     'blog-feed': {
-      label: 'Blog posts', icon: '📰', hint: 'Your latest posts', size: { w: 12, h: 7 }, min: { w: 4, h: 3 },
+      label: 'Blog posts', icon: 'newspaper', hint: 'Your latest posts', size: { w: 12, h: 7 }, min: { w: 4, h: 3 },
       create(data) {
         const wrap = el('div', 'block-blog-feed feed-editor');
         wrap._data = { ...F.BLOCKS['blog-feed'].defaults(), ...data };
         wrap._render = () => {
           if (!store.config.posts.length) {
-            wrap.innerHTML = '<div class="feed-editor__empty"><span aria-hidden="true">📰</span><strong>Your blog posts will appear here</strong><small>Write one from the Blog page in the list on the left.</small></div>';
+            wrap.innerHTML = `<div class="feed-editor__empty">${icon('newspaper', 'icon--lg')}<strong>Your blog posts will appear here</strong><small>Write one from the Blog page in the list on the left.</small></div>`;
             return;
           }
-          wrap.innerHTML = F.BLOCKS['blog-feed'].render(wrap._data, previewCtx()).inner;
-          resolveImagesIn(wrap);
+          setRenderedHtml(wrap, F.BLOCKS['blog-feed'].render(wrap._data, previewCtx()).inner);
         };
         wrap._render();
         return wrap;
@@ -280,16 +302,15 @@
     },
 
     embed: {
-      label: 'Embed code', icon: '🧩', hint: 'For website helpers', size: { w: 6, h: 4 }, min: { w: 2, h: 1 }, advanced: true,
+      label: 'Embed code', icon: 'code', hint: 'For website helpers', size: { w: 6, h: 4 }, min: { w: 2, h: 1 }, advanced: true,
       create(data) {
         const wrap = el('div', 'embed-editor');
         wrap._data = { code: data.code || '' };
         wrap._render = () => {
           wrap.innerHTML = '';
-          wrap.append(
-            el('strong', 'embed-editor__title', '🧩 Custom code'),
-            el('span', 'embed-editor__note', 'It runs on your published website, not here. Change it on the right.'),
-          );
+          const title = el('strong', 'embed-editor__title');
+          title.innerHTML = `${icon('code')}<span>Custom code</span>`;
+          wrap.append(title, el('span', 'embed-editor__note', 'It runs on your published website, not here. Change it in the panel on the right.'));
           if (wrap._data.code) wrap.appendChild(el('code', 'embed-editor__code', wrap._data.code.slice(0, 160)));
           // Never put the code into the editor's own page: it could read her login.
         };
@@ -297,36 +318,49 @@
         return wrap;
       },
       read: (wrap) => ({ ...wrap._data }),
-      inspector: [
-        {
-          key: 'code', type: 'code', label: 'Code to add to the page',
-          warning: 'For website helpers only. Code copied from the internet can break your website or make it unsafe. If someone sent you this, make sure you trust them.',
-        },
-      ],
+      inspector: [{
+        key: 'code', type: 'code', label: 'Code to add to the page',
+        warning: 'For website helpers only. Code copied from the internet can break your website or make it unsafe. If someone sent you this, make sure you trust them.',
+      }],
     },
 
     'site-title': {
-      label: 'Website name', icon: '🏷️', hint: 'Linked to your homepage', size: { w: 5, h: 1 }, min: { w: 2, h: 1 }, regionOnly: true,
+      label: 'Website name & logo', icon: 'badge', hint: 'Linked to your homepage', size: { w: 5, h: 1 }, min: { w: 2, h: 1 }, regionOnly: true,
       create() {
         const wrap = el('div', 'block-site-title');
-        const input = el('input', 'site-title site-title-input');
-        input.type = 'text';
-        input.maxLength = 80;
-        input.setAttribute('aria-label', 'Website name');
-        input.title = 'Click to change your website’s name';
-        input.value = store.config.siteName;
-        input.addEventListener('input', () => { store.config.siteName = input.value.trim() || 'My website'; markDirty(); });
-        wrap.appendChild(input);
         wrap._data = {};
-        wrap._render = () => { if (document.activeElement !== input) input.value = store.config.siteName; };
+        wrap._render = () => {
+          wrap.innerHTML = '';
+          const b = F.normalizeBranding(store.config.branding);
+          const line = el('div', 'site-title');
+          if (b.logo) {
+            const img = el('img', 'site-title__logo');
+            img.alt = '';
+            img.style.height = `${b.logoHeight}px`;
+            showImage(img, b.logo);
+            line.appendChild(img);
+          }
+          if (!b.logo || b.logoMode === 'logo-name') {
+            const input = el('input', 'site-title__name site-title-input');
+            input.type = 'text';
+            input.maxLength = 80;
+            input.setAttribute('aria-label', 'Website name');
+            input.title = 'Click to change your website’s name';
+            input.value = store.config.siteName;
+            input.addEventListener('input', () => { store.config.siteName = input.value.trim() || 'My website'; markDirty(); });
+            line.appendChild(input);
+          }
+          wrap.appendChild(line);
+        };
+        wrap._render();
         return wrap;
       },
       read: () => ({}),
-      inspector: [{ type: 'note', text: 'Your website’s name, linked to your homepage. Click it to change it (or use 🎨 Site Settings).' }],
+      inspector: [{ type: 'note', text: 'Your website’s name (and logo), linked to your homepage. Click the name to change it. Add a logo in Site Settings → Branding.' }],
     },
 
     menu: {
-      label: 'Site menu', icon: '🧭', hint: 'Links to your pages', size: { w: 7, h: 1 }, min: { w: 2, h: 1 }, regionOnly: true,
+      label: 'Site menu', icon: 'menu', hint: 'Links to your pages', size: { w: 7, h: 1 }, min: { w: 2, h: 1 }, regionOnly: true,
       create(data) {
         const wrap = el('nav', 'block-menu menu-editor');
         wrap._data = { ...F.BLOCKS.menu.defaults(), ...data };
@@ -341,7 +375,7 @@
       read: (wrap) => ({ ...wrap._data }),
       inspector: [
         { key: 'align', type: 'select', label: 'Position', options: [['left', 'Left'], ['center', 'Middle'], ['right', 'Right']] },
-        { type: 'note', text: 'The menu shows the pages under “Main Menu” in the list on the left. Drag pages there (or to “Other Pages”) to change it.' },
+        { type: 'note', text: 'The menu shows the pages under “Main Menu” in the list on the left. On phones it folds into a menu button.' },
       ],
     },
   };
@@ -357,7 +391,7 @@
   function emptyPhotoButton(onClick) {
     const btn = el('button', 'image-empty');
     btn.type = 'button';
-    btn.innerHTML = '<span class="image-empty__icon" aria-hidden="true">📷</span><strong>Add a photo</strong><small>Click to pick one of your photos or add a new one</small>';
+    btn.innerHTML = `${icon('image-plus', 'icon--lg')}<strong>Add a photo</strong><small>Click to pick one of your photos or add a new one</small>`;
     btn.addEventListener('click', onClick);
     return btn;
   }
@@ -384,8 +418,56 @@
   }
 
   /* ========================================================================
-     3. CANVAS + SELECTION
+     3. CANVAS — rows of sections, one Gridstack per section
      ======================================================================== */
+
+  const grids = new Map();        // section id → GridStack
+  const sectionInfo = new Map();  // section id → { width, style }
+  let regionGrid = null;          // the single grid of the Header / Footer
+  let sectionSeq = 0;
+
+  const canvasEl = () => $('#canvas');
+  const isRegion = () => ['header', 'footer'].includes(currentKind());
+  const allGrids = () => (regionGrid ? [regionGrid] : Array.from(grids.values()));
+
+  function gridOptions(minRow) {
+    return {
+      column: F.COLUMNS,
+      cellHeight: CONFIG.cellHeight,
+      margin: F.normalizeTheme(store.config.theme).blockSpacing / 2,
+      float: true,                     // free-form: blocks stay where they're dropped
+      minRow,
+      handle: '.block-handle',
+      // Library tiles, and blocks dragged in from another section
+      acceptWidgets: (n) => n.classList.contains('lib-tile') || n.classList.contains('grid-stack-item'),
+      resizable: { handles: 'se' },
+      animate: true,
+      columnOpts: { breakpoints: [] },
+    };
+  }
+
+  function createGrid(container, minRow) {
+    const g = GridStack.init(gridOptions(minRow), container);
+    g.on('change added removed', () => { markDirty(); refreshEmptyStates(); });
+    g.on('dropped', (_e, _prev, node) => {
+      if (!node || !node.el || node.el.querySelector('.block-body')) return; // a block moved from another section
+      const { el: dropped, x, y } = node;
+      const type = dropped.dataset.widgetType;
+      g.removeWidget(dropped, true, false);
+      const item = addBlock(type, null, { x, y }, { grid: g, focus: true });
+      if (item) afterAdd(item);
+    });
+    g.on('dragstart resizestart', () => { $('#paper').classList.add('is-arranging'); hideToolbar(); closeLibrary(); });
+    g.on('dragstop resizestop', () => $('#paper').classList.remove('is-arranging'));
+    return g;
+  }
+
+  function destroyGrids() {
+    for (const g of allGrids()) { try { g.destroy(false); } catch { /* ignore */ } }
+    grids.clear();
+    sectionInfo.clear();
+    regionGrid = null;
+  }
 
   function createBlockElement(type, data, pos) {
     const ed = EDITORS[type];
@@ -400,8 +482,8 @@
     item.setAttribute('gs-min-h', ed.min.h);
     const shell = el('div', 'grid-stack-item-content block-shell');
     const bar = el('div', 'block-bar');
-    bar.innerHTML = '<span class="block-handle" title="Hold and drag to move this box">✥ Move</span>' +
-      '<button type="button" class="block-delete" title="Remove this box">🗑 Remove</button>';
+    bar.innerHTML = `<span class="block-handle" title="Hold and drag to move this block">${icon('grip-vertical')}<span>Move</span></span>` +
+      `<button type="button" class="block-delete" title="Remove this block" aria-label="Remove this block">${icon('trash-2')}</button>`;
     const body = el('div', 'block-body');
     body.appendChild(ed.create({ ...F.BLOCKS[type].defaults(), ...data }));
     shell.append(bar, body);
@@ -409,34 +491,45 @@
     return item;
   }
 
+  /** The grid new blocks go into: the selected section, else the first one. */
+  function targetGrid() {
+    if (regionGrid) return regionGrid;
+    if (selectedSection && grids.has(selectedSection)) return grids.get(selectedSection);
+    if (selected && selected.gridstackNode) return selected.gridstackNode.grid;
+    return grids.values().next().value;
+  }
+
   function addBlock(type, data, pos, opts = {}) {
     if (!EDITORS[type]) return null;
-    if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) pos = { ...pos, x: 0, y: grid.engine.getRow() };
+    const g = opts.grid || targetGrid();
+    if (!g) return null;
+    if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) pos = { ...pos, x: 0, y: g.engine.getRow() };
+    // In a narrow section a new block fills the width.
+    const secId = g.el.dataset.section;
+    if (!pos.w && secId && sectionInfo.has(secId) && sectionInfo.get(secId).width <= 50) pos = { ...pos, w: F.COLUMNS };
     const item = createBlockElement(type, data, pos);
-    canvasEl().appendChild(item);
-    grid.makeWidget(item);
+    g.el.appendChild(item);
+    g.makeWidget(item);
     if (opts.focus) {
       item.scrollIntoView({ behavior: 'smooth', block: 'center' });
       const editable = item.querySelector('[contenteditable="true"]');
       if (editable) setTimeout(() => editable.focus(), 250);
     }
-    refreshEmptyState();
+    refreshEmptyStates();
+    renderIcons();
     return item;
   }
 
   function removeBlock(item) {
     const snap = readBlock(item);
+    const g = item.gridstackNode && item.gridstackNode.grid;
     if (selected === item) selectBlock(null);
-    grid.removeWidget(item);
-    refreshEmptyState();
-    showToast('Box removed.', 'Undo', () => {
-      addBlock(snap.type, snap.data, { x: snap.x, y: snap.y, w: snap.w, h: snap.h });
+    if (g) g.removeWidget(item);
+    refreshEmptyStates();
+    showToast('Block removed.', 'Undo', () => {
+      addBlock(snap.type, snap.data, { x: snap.x, y: snap.y, w: snap.w, h: snap.h }, { grid: g && g.el.isConnected ? g : undefined });
       markDirty();
     });
-  }
-
-  function refreshEmptyState() {
-    $('#paper').classList.toggle('is-empty', !grid || grid.getGridItems().length === 0);
   }
 
   const editorOf = (item) => item.querySelector('.block-body').firstElementChild;
@@ -447,45 +540,292 @@
     return { type, x: n.x, y: n.y, w: n.w, h: n.h, data: EDITORS[type].read(editorOf(item)) };
   }
 
-  function readCanvas() {
-    return F.sortBlocks(grid.getGridItems()
+  function readGrid(g) {
+    return F.sortBlocks(g.getGridItems()
       .filter((it) => it.gridstackNode && EDITORS[it.dataset.widgetType] && it.querySelector('.block-body'))
       .map(readBlock));
   }
 
-  function loadCanvas(blocks, kind) {
+  /** The doc on the canvas as data: rows (pages/posts) or blocks (Header/Footer). */
+  function readCanvas() {
+    if (regionGrid) return { blocks: readGrid(regionGrid) };
+    const rows = Array.from(canvasEl().querySelectorAll(':scope > .ed-row')).map((rowEl) => ({
+      sections: Array.from(rowEl.querySelectorAll(':scope > .ed-section')).map((secEl) => {
+        const id = secEl.dataset.section;
+        const info = sectionInfo.get(id);
+        return { width: info.width, style: { ...info.style }, blocks: readGrid(grids.get(id)) };
+      }),
+    }));
+    return { rows };
+  }
+
+  function refreshEmptyStates() {
+    canvasEl().querySelectorAll('.ed-section, .ed-region').forEach((s) => {
+      const g = s.querySelector('.grid-stack');
+      s.classList.toggle('is-empty', !g || !g.querySelector('.grid-stack-item'));
+    });
+  }
+
+  /** Draw a section's background (colour, photo, overlay) and text tone. */
+  function paintSection(secEl, info) {
+    const st = F.normalizeSectionStyle(info.style);
+    secEl.className = ['ed-section', 'page-section', st.tone === 'light' ? 'page-section--light' : '', st.bgColor || st.bgImage ? 'page-section--filled' : '',
+      secEl.dataset.section === selectedSection ? 'is-selected' : ''].filter(Boolean).join(' ');
+    if (st.bgColor) secEl.style.setProperty('--section-bg', st.bgColor); else secEl.style.removeProperty('--section-bg');
+    secEl.querySelectorAll(':scope > .page-section__bg, :scope > .page-section__overlay').forEach((n) => n.remove());
+    const first = secEl.firstChild;
+    if (st.bgImage) {
+      const bg = el('div', 'page-section__bg');
+      const img = el('img');
+      img.alt = '';
+      showImage(img, st.bgImage);
+      bg.appendChild(img);
+      secEl.insertBefore(bg, first);
+    }
+    if (st.overlayOpacity > 0) {
+      const ov = el('div', 'page-section__overlay');
+      ov.style.background = st.overlayColor;
+      ov.style.opacity = (st.overlayOpacity / 100).toFixed(2);
+      secEl.insertBefore(ov, secEl.querySelector('.ed-section__bar'));
+    }
+  }
+
+  function gapEl(index) {
+    const gap = el('div', 'ed-gap');
+    gap.dataset.gap = index;
+    const btn = iconButton('plus', 'Add a section here', 'ed-gap__add');
+    btn.dataset.gap = index;
+    gap.appendChild(btn);
+    return gap;
+  }
+
+  function sectionEl(section) {
+    const id = `s${++sectionSeq}`;
+    sectionInfo.set(id, { width: section.width, style: F.normalizeSectionStyle(section.style) });
+    const sec = el('div', 'ed-section page-section');
+    sec.dataset.section = id;
+    const bar = el('div', 'ed-section__bar');
+    bar.innerHTML = `<span class="ed-section__tag">${icon('rows-3')}<span>Section</span></span>`;
+    const actions = [
+      ['sliders-horizontal', 'Section settings', 'settings'],
+      ['columns-2', 'Put a section next to this one', 'beside'],
+      ['arrow-up', 'Move this row up', 'up'],
+      ['arrow-down', 'Move this row down', 'down'],
+      ['trash-2', 'Remove this section', 'delete'],
+    ];
+    for (const [ic, label, act] of actions) {
+      const b = iconButton(ic, label, 'ed-section__btn');
+      b.dataset.sectionAction = act;
+      bar.appendChild(b);
+    }
+    const wrap = el('div', 'ed-grid-wrap');
+    const gridDiv = el('div', 'grid-stack');
+    gridDiv.dataset.section = id;
+    wrap.appendChild(gridDiv);
+    const empty = el('div', 'ed-section__empty');
+    empty.innerHTML = `${icon('plus')}<span>Empty section — add a block</span>`;
+    empty.dataset.addBlock = id;
+    const add = iconButton('plus', 'Add a block', 'ed-section__add', true);
+    add.title = 'Add a block to this section';
+    add.dataset.addBlock = id;
+    sec.append(bar, wrap, empty, add);
+    paintSection(sec, sectionInfo.get(id));
+    return { id, sec, gridDiv, blocks: section.blocks };
+  }
+
+  /** Build the canvas for a doc. */
+  function loadCanvas(doc) {
     isLoading = true;
+    const scroll = $('.canvas-area').scrollTop;
     try {
+      hideToolbar();
       selectBlock(null, { silent: true });
-      grid.removeAll(true, false);
-      canvasEl().querySelectorAll(':scope > .grid-stack-item').forEach((n) => n.remove());
-      grid.opts.minRow = CONFIG.minRows[kind] || 2;
-      grid.batchUpdate();
-      for (const b of blocks) if (EDITORS[b.type]) addBlock(b.type, b.data, { x: b.x, y: b.y, w: b.w, h: b.h });
-      grid.batchUpdate(false);
-      if (grid._updateContainerHeight) grid._updateContainerHeight();
+      selectedSection = null;
+      destroyGrids();
+      const canvas = canvasEl();
+      canvas.innerHTML = '';
+      canvas.dataset.kind = doc.kind;
+
+      if (doc.kind === 'header' || doc.kind === 'footer') {
+        const region = el('div', 'ed-region');
+        const wrap = el('div', 'ed-grid-wrap');
+        const gridDiv = el('div', 'grid-stack');
+        wrap.appendChild(gridDiv);
+        const add = iconButton('plus', `Add a block to the ${doc.kind === 'header' ? 'Header' : 'Footer'}`, 'ed-section__add ed-region__add', true);
+        add.dataset.addBlock = 'region';
+        region.append(wrap, add);
+        canvas.appendChild(region);
+        regionGrid = createGrid(gridDiv, CONFIG.minRows[doc.kind]);
+        regionGrid.batchUpdate();
+        for (const b of doc.blocks || []) if (EDITORS[b.type]) addBlock(b.type, b.data, { x: b.x, y: b.y, w: b.w, h: b.h }, { grid: regionGrid });
+        regionGrid.batchUpdate(false);
+      } else {
+        const rows = F.normalizeRows(doc.rows);
+        canvas.appendChild(gapEl(0));
+        rows.forEach((row, i) => {
+          const rowEl = el('div', `ed-row section-row section-row--${row.sections.length === 1 ? 'full' : 'split'}`);
+          if (row.sections.length > 1) rowEl.style.setProperty('--row-columns', row.sections.map((s) => `${s.width}fr`).join(' '));
+          const built = row.sections.map(sectionEl);
+          built.forEach((b) => rowEl.appendChild(b.sec));
+          canvas.appendChild(rowEl);
+          canvas.appendChild(gapEl(i + 1));
+          for (const b of built) {
+            const g = createGrid(b.gridDiv, CONFIG.minRows.section);
+            grids.set(b.id, g);
+            g.batchUpdate();
+            for (const blk of b.blocks) if (EDITORS[blk.type]) addBlock(blk.type, blk.data, { x: blk.x, y: blk.y, w: blk.w, h: blk.h }, { grid: g });
+            g.batchUpdate(false);
+          }
+        });
+      }
     } finally {
       isLoading = false;
-      refreshEmptyState();
+      refreshEmptyStates();
+      renderIcons();
+      $('.canvas-area').scrollTop = scroll;
+    }
+  }
+
+  /** Change the rows of the open page/post, then redraw. */
+  function editRows(fn, { selectAt } = {}) {
+    flushCanvas();
+    const doc = store.docs[store.current];
+    doc.rows = F.normalizeRows(doc.rows);
+    fn(doc.rows);
+    doc.rows = F.normalizeRows(doc.rows);
+    loadCanvas(doc);
+    if (selectAt) {
+      const rowEl = canvasEl().querySelectorAll(':scope > .ed-row')[selectAt[0]];
+      const secEl = rowEl && rowEl.querySelectorAll(':scope > .ed-section')[selectAt[1] || 0];
+      if (secEl) selectSection(secEl.dataset.section);
+    } else {
+      renderInspector();
+    }
+    markDirty();
+  }
+
+  /** Where a section is: [row index, section index]. */
+  function sectionPos(id) {
+    const rows = Array.from(canvasEl().querySelectorAll(':scope > .ed-row'));
+    for (let r = 0; r < rows.length; r++) {
+      const secs = Array.from(rows[r].querySelectorAll(':scope > .ed-section'));
+      const s = secs.findIndex((n) => n.dataset.section === id);
+      if (s >= 0) return [r, s, secs.length];
+    }
+    return null;
+  }
+
+  function addRow(index, layoutKey = 'one', firstBlock = null) {
+    const widths = (F.ROW_LAYOUTS[layoutKey] || F.ROW_LAYOUTS.one).widths;
+    editRows((rows) => {
+      const sections = widths.map((w) => F.newSection(w));
+      if (firstBlock) {
+        const ed = EDITORS[firstBlock];
+        sections[0].blocks.push({ type: firstBlock, x: 0, y: 0, w: Math.min(ed.size.w, 12), h: ed.size.h, data: F.BLOCKS[firstBlock].defaults() });
+      }
+      rows.splice(index, 0, { sections });
+    }, { selectAt: [index, 0] });
+    if (firstBlock) {
+      const sec = canvasEl().querySelectorAll(':scope > .ed-row')[index].querySelector('.ed-section');
+      const item = sec && sec.querySelector('.grid-stack-item');
+      if (item) { selectBlock(item); const ed = item.querySelector('[contenteditable="true"]'); if (ed) setTimeout(() => ed.focus(), 150); }
+    }
+  }
+
+  /** Change how many sections a row has (and their widths). Blocks are never lost. */
+  function setRowLayout(rowIndex, layoutKey) {
+    const widths = F.ROW_LAYOUTS[layoutKey].widths;
+    editRows((rows) => {
+      const row = rows[rowIndex];
+      const secs = row.sections;
+      while (secs.length > widths.length) {
+        // Merge the extra section's blocks into the last one that stays, underneath.
+        const gone = secs.pop();
+        const keep = secs[secs.length - 1];
+        const bottom = keep.blocks.reduce((m, b) => Math.max(m, b.y + b.h), 0);
+        gone.blocks.forEach((b) => keep.blocks.push({ ...b, y: b.y + bottom }));
+      }
+      while (secs.length < widths.length) secs.push(F.newSection());
+      secs.forEach((s, i) => { s.width = widths[i]; });
+    }, { selectAt: [rowIndex, 0] });
+  }
+
+  function moveRow(rowIndex, dir) {
+    const to = rowIndex + dir;
+    editRows((rows) => {
+      if (to < 0 || to >= rows.length) return;
+      const [r] = rows.splice(rowIndex, 1);
+      rows.splice(to, 0, r);
+    }, { selectAt: [Math.max(0, Math.min(to, store.docs[store.current].rows.length - 1)), 0] });
+  }
+
+  function removeSection(id) {
+    const pos = sectionPos(id);
+    if (!pos) return;
+    flushCanvas();
+    const before = JSON.parse(JSON.stringify(store.docs[store.current].rows));
+    editRows((rows) => {
+      const row = rows[pos[0]];
+      if (row.sections.length === 1) rows.splice(pos[0], 1);
+      else {
+        row.sections.splice(pos[1], 1);
+        const each = Math.floor(100 / row.sections.length);
+        row.sections.forEach((s, i) => { s.width = i === row.sections.length - 1 ? 100 - each * (row.sections.length - 1) : each; });
+      }
+    });
+    showToast('Section removed.', 'Undo', () => editRows((rows) => { rows.splice(0, rows.length, ...before); }));
+  }
+
+  function sectionAction(id, action) {
+    const pos = sectionPos(id);
+    if (!pos) return;
+    if (action === 'settings') selectSection(id);
+    else if (action === 'up') moveRow(pos[0], -1);
+    else if (action === 'down') moveRow(pos[0], +1);
+    else if (action === 'delete') removeSection(id);
+    else if (action === 'beside') {
+      if (pos[2] >= 3) { showToast('A row can hold up to three sections.'); return; }
+      setRowLayout(pos[0], pos[2] === 1 ? 'main' : 'three');
     }
   }
 
   function refreshLiveBlocks() {
-    grid.getGridItems().forEach((it) => {
-      if (['menu', 'blog-feed', 'site-title'].includes(it.dataset.widgetType)) editorOf(it)._render();
-    });
+    for (const g of allGrids()) {
+      g.getGridItems().forEach((it) => {
+        if (['menu', 'blog-feed', 'site-title'].includes(it.dataset.widgetType)) editorOf(it)._render();
+      });
+    }
+    renderIcons();
   }
 
-  /** The box whose settings show in the Inspector. */
-  let selected = null;
+  /* ---------------- selection: one block, or one section ---------------- */
+
+  let selected = null;          // a block (grid item)
+  let selectedSection = null;   // a section id
 
   function selectBlock(item, { silent = false } = {}) {
     if (item && !item.isConnected) item = null;
-    if (selected === item) return;
+    if (item) setSelectedSection(null);
+    if (selected === item) { if (!silent && item) renderInspector(); return; }
     if (selected) selected.classList.remove('is-selected');
     selected = item;
     if (item) item.classList.add('is-selected');
     if (!silent) renderInspector();
+  }
+
+  function setSelectedSection(id) {
+    if (selectedSection === id) return;
+    const old = selectedSection && canvasEl().querySelector(`.ed-section[data-section="${selectedSection}"]`);
+    if (old) old.classList.remove('is-selected');
+    selectedSection = id;
+    const now = id && canvasEl().querySelector(`.ed-section[data-section="${id}"]`);
+    if (now) now.classList.add('is-selected');
+  }
+
+  function selectSection(id) {
+    if (selected) { selected.classList.remove('is-selected'); selected = null; }
+    setSelectedSection(id);
+    renderInspector();
   }
 
   /* ========================================================================
@@ -493,10 +833,10 @@
      ======================================================================== */
 
   const store = {
-    remote: new Map(),     // path → { content, sha } (draft branch, else live)
-    livePaths: new Set(),  // files on the live site ("New" badges)
+    remote: new Map(),
+    livePaths: new Set(),
     config: F.defaultConfig(),
-    docs: {},              // file → { kind, blocks }
+    docs: {},              // file → { kind, rows } (pages/posts) or { kind, blocks } (header/footer)
     customCss: '',
     baseCss: '',
     current: null,
@@ -510,22 +850,22 @@
   const pageMeta = (file) => store.config.pages.find((p) => p.file === file);
   const postMeta = (file) => store.config.posts.find((p) => p.file === file);
   const docMeta = (file) => pageMeta(file) || postMeta(file);
+  const docBlocks = (doc) => (doc ? (doc.rows ? F.blocksOfRows(doc.rows) : doc.blocks || []) : []);
 
-  /** The page that lists the blog posts (its posts nest under it in the sidebar). */
   function blogPageFile() {
     if (store.config.blogPage && store.docs[store.config.blogPage]) return store.config.blogPage;
-    // Not recorded (older websites): the best guess is a page called "blog…",
-    // then a page listing ALL posts, then any page with a Blog posts box.
-    const feeds = store.config.pages.filter((p) => (store.docs[p.file] || { blocks: [] }).blocks.some((b) => b.type === 'blog-feed'));
+    const feeds = store.config.pages.filter((p) => docBlocks(store.docs[p.file]).some((b) => b.type === 'blog-feed'));
     const best = feeds.find((p) => /^blog/.test(p.file))
-      || feeds.find((p) => store.docs[p.file].blocks.some((b) => b.type === 'blog-feed' && !b.data.limit))
+      || feeds.find((p) => docBlocks(store.docs[p.file]).some((b) => b.type === 'blog-feed' && !b.data.limit))
       || feeds[0];
     return best ? best.file : '';
   }
 
   function flushCanvas() {
     if (isLoading || !store.current || !store.docs[store.current]) return;
-    store.docs[store.current].blocks = readCanvas();
+    const data = readCanvas();
+    if (data.rows) store.docs[store.current].rows = data.rows;
+    if (data.blocks) store.docs[store.current].blocks = data.blocks;
   }
 
   function siteState() {
@@ -533,9 +873,7 @@
     return { config: store.config, docs: store.docs, customCss: store.customCss };
   }
 
-  function buildFiles() {
-    return F.buildSiteFiles(siteState(), { baseCss: store.baseCss });
-  }
+  function buildFiles() { return F.buildSiteFiles(siteState(), { baseCss: store.baseCss }); }
 
   function pendingChanges() {
     const files = buildFiles();
@@ -567,7 +905,7 @@
 
   function markDirty() {
     if (isLoading) return;
-    $('#save-status').textContent = 'Saving…';
+    setStatus('Saving…');
     clearTimeout(saveTimer);
     saveTimer = setTimeout(flushSave, CONFIG.autosaveDelay);
   }
@@ -581,13 +919,19 @@
     updateSaveStatus(ok);
   }
 
-  function updateSaveStatus(ok = true) {
+  function setStatus(text, state = '') {
     const s = $('#save-status');
-    s.classList.toggle('is-error', !ok);
-    if (!ok) { s.textContent = "⚠ Couldn't keep your changes on this computer (storage is full)"; return; }
+    s.dataset.state = state;
+    s.querySelector('.save-status__text').textContent = text;
+    s.title = text;
+  }
+
+  function updateSaveStatus(ok = true) {
+    if (!ok) { setStatus('Couldn’t keep your changes on this computer (storage is full)', 'error'); return; }
     const unsaved = lastPending.length > 0;
-    s.textContent = unsaved ? '● Changes not saved yet' : store.draftAhead ? '✓ Draft saved · not live yet' : '✓ Your website is up to date';
-    s.classList.toggle('is-unsaved', unsaved);
+    if (unsaved) setStatus('Changes not saved yet', 'unsaved');
+    else if (store.draftAhead) setStatus('Draft saved · not live yet', 'draft');
+    else setStatus('Your website is up to date', 'ok');
   }
 
   /* ========================================================================
@@ -603,12 +947,12 @@
     try {
       if (store.current) flushSave();
       store.current = file;
-      loadCanvas(doc.blocks, doc.kind);
+      loadCanvas(doc);
       try { localStorage.setItem(lastDocKey(), file); } catch { /* ignore */ }
     } finally {
       isSwitching = false;
     }
-    if (doc.kind === 'post') blogExpanded = true;
+    sidebarPane = doc.kind === 'post' || file === blogPageFile() ? 'blog' : 'pages';
     renderDocChrome();
     renderSidebar();
     renderInspector();
@@ -617,21 +961,10 @@
 
   function renderDocChrome() {
     const kind = currentKind();
-    const meta = docMeta(store.current);
-    const title = $('#page-title');
-    const label = $('#page-title-label');
-    if (kind === 'header' || kind === 'footer') {
-      title.value = kind === 'header' ? 'Header' : 'Footer';
-      title.disabled = true;
-      label.textContent = 'Editing the';
-    } else {
-      title.value = meta ? meta.title : F.nameFromFile(store.current);
-      title.disabled = false;
-      label.textContent = kind === 'post' ? 'Post title' : 'Page name';
-    }
     $('#paper').dataset.kind = kind;
-    document.querySelectorAll('#add-drawer .add-tile').forEach((t) => { t.hidden = !allowedHere(t.dataset.widgetType); });
-    document.querySelectorAll('#add-drawer .add-group').forEach((g) => { g.hidden = !g.querySelector('.add-tile:not([hidden])'); });
+    const meta = docMeta(store.current);
+    const names = { header: 'Header', footer: 'Footer' };
+    $('#doc-crumb').textContent = names[kind] || (meta ? meta.title : F.nameFromFile(store.current));
     renderRegionPreviews();
   }
 
@@ -642,26 +975,24 @@
     return file;
   }
 
-  /** A new page; it goes into the Main Menu (or Other Pages). */
   function createPage(name, inMenu = true) {
     name = name.trim();
     if (!name) return;
     const file = uniqueFile(F.slugify(name, 'page'));
     insertPage({ file, title: name.slice(0, 80), showInNavbar: inMenu });
-    store.docs[file] = { kind: 'page', blocks: [] };
+    store.docs[file] = { kind: 'page', rows: F.rowsFromBlocks([]) };
+    sidebarPane = 'pages';
     openDoc(file);
     markDirty();
-    showToast(`Your new page “${name}” is ready${inMenu ? ' and has a link in your menu' : ''}. Add boxes with “＋ Add”.`);
+    showToast(`Your new page “${name}” is ready${inMenu ? ' and has a link in your menu' : ''}. Hover over the page and press + to add things.`);
   }
 
-  /** Put a page at the end of its list (Main Menu or Other Pages). */
   function insertPage(meta) {
     const pages = store.config.pages;
     const lastOfList = pages.map((p) => p.showInNavbar === meta.showInNavbar).lastIndexOf(true);
     pages.splice(lastOfList + 1, 0, meta);
   }
 
-  /** Make sure there's a Blog page; returns its file. */
   function ensureBlogPage() {
     const existing = blogPageFile();
     if (existing) { store.config.blogPage = existing; return existing; }
@@ -669,10 +1000,10 @@
     insertPage({ file, title: 'Blog', showInNavbar: true });
     store.docs[file] = {
       kind: 'page',
-      blocks: [
+      rows: F.rowsFromBlocks([
         { type: 'text', x: 0, y: 0, w: 12, h: 2, data: { html: '<h2>Blog</h2><p>My latest stories.</p>' } },
         { type: 'blog-feed', x: 0, y: 2, w: 12, h: 7, data: { limit: 0 } },
-      ],
+      ]),
     };
     store.config.blogPage = file;
     return file;
@@ -685,15 +1016,27 @@
     ensureBlogPage();
     const file = uniqueFile(F.slugify(title, 'post'), 'blog/');
     store.config.posts.push({ file, title: title.slice(0, 140), date: F.todayIso(), thumbnail: '', excerpt: '', excerptAuto: true });
-    store.docs[file] = { kind: 'post', blocks: [{ type: 'text', x: 0, y: 0, w: 12, h: 4, data: { html: '' } }] };
-    blogExpanded = true;
+    store.docs[file] = { kind: 'post', rows: F.rowsFromBlocks([{ type: 'text', x: 0, y: 0, w: 12, h: 4, data: { html: '' } }]) };
+    sidebarPane = 'blog';
     openDoc(file);
     markDirty();
-    showToast(hadBlog ? 'Your new post is ready. Write away!' : 'Your blog has started! Pebble made a “Blog” page that lists your posts — your new post is under it on the left.');
+    showToast(hadBlog ? 'Your new post is ready. Write away!' : 'Your blog has started. Pebble made a “Blog” page that lists your posts.');
+  }
+
+  /** Rename a page or post (from the sidebar). */
+  function renameDoc(file, title) {
+    const meta = docMeta(file);
+    title = String(title || '').trim();
+    if (!meta || !title || title === meta.title) return;
+    meta.title = title.slice(0, postMeta(file) ? 140 : 80);
+    refreshLiveBlocks();
+    renderDocChrome();
+    renderSidebar();
+    markDirty();
   }
 
   /* ========================================================================
-     6. HEADER / FOOTER PREVIEWS & HERO IMAGE
+     6. HEADER / FOOTER PREVIEWS & HERO
      ======================================================================== */
 
   function renderRegionPreviews() {
@@ -707,12 +1050,9 @@
     renderHeroOnCanvas();
     if (!showRegions) return;
 
-    flushCanvas();
     const ctx = previewCtx();
-    top.querySelector('.region-preview__content').innerHTML = F.renderRegion('header', store.docs['header.html'].blocks, ctx);
-    bottom.querySelector('.region-preview__content').innerHTML = F.renderRegion('footer', store.docs['footer.html'].blocks, ctx);
-    resolveImagesIn(top);
-    resolveImagesIn(bottom);
+    setRenderedHtml(top.querySelector('.region-preview__content'), F.renderRegion('header', store.docs['header.html'].blocks, ctx));
+    setRenderedHtml(bottom.querySelector('.region-preview__content'), F.renderRegion('footer', store.docs['footer.html'].blocks, ctx));
 
     if (kind === 'post') {
       const meta = postMeta(store.current);
@@ -733,7 +1073,6 @@
     }
   }
 
-  /** While editing the Header: show its hero image on the canvas too. */
   function renderHeroOnCanvas() {
     const paper = $('#paper');
     const box = $('#header-hero');
@@ -758,91 +1097,96 @@
   }
 
   /* ========================================================================
-     7. SIDEBAR — Main Menu / Other Pages (drag & drop), nested blog posts
+     7. SIDEBAR — Main Menu / Other Pages, rename, blog sub-sidebar
      ======================================================================== */
 
-  let blogExpanded = (() => { try { return sessionStorage.getItem('pebble:blog-open') === '1'; } catch { return false; } })();
+  let sidebarPane = 'pages';   // 'pages' | 'blog'
+
+  function docItem(file, iconName, label, sub, { renamable = false } = {}) {
+    const pending = new Set(lastPending.map((p) => p.path));
+    const row = el('div', 'nav-item' + (file === store.current ? ' is-current' : ''));
+    row.dataset.file = file;
+    const btn = el('button', 'nav-item__main');
+    btn.type = 'button';
+    btn.dataset.open = file;
+    if (file === store.current) btn.setAttribute('aria-current', 'page');
+    btn.innerHTML = icon(iconName, 'nav-item__icon');
+    const name = el('span', 'nav-item__name', label);
+    if (sub) name.appendChild(el('small', 'nav-item__sub', sub));
+    btn.appendChild(name);
+    if (pending.has(file)) btn.appendChild(el('span', 'nav-item__dot'));
+    if (!store.livePaths.has(file)) btn.appendChild(el('span', 'nav-item__badge', 'New'));
+    row.appendChild(btn);
+    if (renamable) {
+      const r = iconButton('pencil', 'Rename', 'nav-item__act');
+      r.dataset.rename = file;
+      row.appendChild(r);
+    }
+    return row;
+  }
 
   function renderSidebar() {
-    const pending = new Set(lastPending.map((p) => p.path));
     const blogFile = blogPageFile();
+    $('#sidebar').dataset.pane = blogFile && sidebarPane === 'blog' ? 'blog' : 'pages';
 
-    const itemButton = (file, icon, label, sub) => {
-      const btn = el('button', 'page-item' + (file === store.current ? ' is-current' : ''));
-      btn.type = 'button';
-      btn.dataset.file = file;
-      if (file === store.current) btn.setAttribute('aria-current', 'page');
-      btn.appendChild(el('span', 'page-item__icon', icon));
-      const name = el('span', 'page-item__name', label);
-      if (sub) name.appendChild(el('small', 'page-item__date', sub));
-      btn.appendChild(name);
-      if (pending.has(file)) btn.insertAdjacentHTML('beforeend', '<span class="page-item__dot" title="Changes not saved yet"></span>');
-      if (!store.livePaths.has(file)) btn.insertAdjacentHTML('beforeend', '<span class="page-item__badge" title="Not on your website yet">New</span>');
-      return btn;
-    };
-
-    const pageEntry = (p) => {
-      const li = el('li', 'page-entry');
-      li.dataset.file = p.file;
-      li.draggable = true;
-      const row = el('div', 'page-row');
-      row.appendChild(el('span', 'page-grip', '⋮⋮'));
-      row.appendChild(itemButton(p.file, p.file === 'index.html' ? '🏠' : p.file === blogFile ? '📰' : '📄', p.title));
-      const move = el('button', 'page-move', p.showInNavbar ? '↓' : '↑');
-      move.type = 'button';
-      move.dataset.move = p.file;
-      move.title = p.showInNavbar ? 'Move to Other Pages (no menu link)' : 'Move to the Main Menu';
-      move.setAttribute('aria-label', move.title);
-      row.appendChild(move);
-      li.appendChild(row);
-
-      if (p.file === blogFile) {
-        const toggle = el('button', 'page-expand', `${blogExpanded ? '▾' : '▸'} ${store.config.posts.length} blog post${store.config.posts.length === 1 ? '' : 's'}`);
-        toggle.type = 'button';
-        toggle.dataset.toggleBlog = '1';
-        toggle.setAttribute('aria-expanded', String(blogExpanded));
-        li.appendChild(toggle);
-        if (blogExpanded) {
-          const ul = el('ul', 'post-list');
-          for (const post of F.sortedPosts(store.config)) {
-            const pli = el('li');
-            pli.appendChild(itemButton(post.file, '✏️', post.title, F.formatDate(post.date)));
-            ul.appendChild(pli);
-          }
-          const add = el('button', 'add-page add-page--post', '＋ Write a blog post');
-          add.type = 'button';
-          add.dataset.newPost = '1';
-          const ali = el('li');
-          ali.appendChild(add);
-          ul.appendChild(ali);
-          li.appendChild(ul);
-        }
-      }
-      return li;
-    };
-
+    // Main pane: Main Menu / Other Pages
     for (const [id, inMenu] of [['#menu-pages', true], ['#other-pages', false]]) {
       const ul = $(id);
       ul.innerHTML = '';
       const list = store.config.pages.filter((p) => p.showInNavbar === inMenu);
-      list.forEach((p) => ul.appendChild(pageEntry(p)));
-      if (!list.length) {
-        const empty = el('li', 'page-list__empty', inMenu ? 'Drag a page here to give it a menu link.' : 'Drag a page here to take it out of the menu. It stays on your website.');
-        ul.appendChild(empty);
+      for (const p of list) {
+        const li = el('li', 'page-entry');
+        li.dataset.file = p.file;
+        li.draggable = true;
+        const grip = el('span', 'page-grip');
+        grip.innerHTML = icon('grip-vertical');
+        li.appendChild(grip);
+        const isBlog = p.file === blogFile;
+        const item = docItem(p.file, p.file === 'index.html' ? 'house' : isBlog ? 'newspaper' : 'file', p.title, isBlog ? `${store.config.posts.length} post${store.config.posts.length === 1 ? '' : 's'}` : '', { renamable: true });
+        if (isBlog) {
+          item.querySelector('.nav-item__main').dataset.openBlog = '1';
+          const go = el('span', 'nav-item__chev');
+          go.innerHTML = icon('chevron-right');
+          item.querySelector('.nav-item__main').appendChild(go);
+        }
+        const move = iconButton(p.showInNavbar ? 'arrow-down-to-line' : 'arrow-up-to-line', p.showInNavbar ? 'Move to Other Pages (no menu link)' : 'Move to the Main Menu', 'nav-item__act');
+        move.dataset.move = p.file;
+        item.appendChild(move);
+        li.appendChild(item);
+        ul.appendChild(li);
       }
+      if (!list.length) ul.appendChild(el('li', 'page-list__empty', inMenu ? 'Drag a page here to give it a menu link.' : 'Drag a page here to take it out of the menu. It stays on your website.'));
     }
     $('#btn-start-blog').hidden = !!blogFile;
 
     const regions = $('#region-list');
     regions.innerHTML = '';
-    for (const [file, icon, label] of [['header.html', '⬆️', 'Header'], ['footer.html', '⬇️', 'Footer']]) {
+    for (const [file, ic, label] of [['header.html', 'panel-top', 'Header'], ['footer.html', 'panel-bottom', 'Footer']]) {
       const li = el('li');
-      li.appendChild(itemButton(file, icon, label));
+      li.appendChild(docItem(file, ic, label));
       regions.appendChild(li);
     }
+
+    // Blog pane
+    if (blogFile) {
+      const meta = pageMeta(blogFile);
+      $('#blog-pane-title').textContent = meta ? meta.title : 'Blog';
+      const bp = $('#blog-page-item');
+      bp.innerHTML = '';
+      bp.appendChild(docItem(blogFile, 'layout-list', 'Blog page', 'The page that lists your posts', { renamable: false }));
+      const ul = $('#post-list');
+      ul.innerHTML = '';
+      const posts = F.sortedPosts(store.config);
+      for (const p of posts) {
+        const li = el('li');
+        li.appendChild(docItem(p.file, 'file-text', p.title, F.formatDate(p.date), { renamable: true }));
+        ul.appendChild(li);
+      }
+      $('#posts-empty').hidden = posts.length > 0;
+    }
+    renderIcons();
   }
 
-  /** Move a page to the Main Menu or Other Pages, before another page (or at the end). */
   function movePage(file, inMenu, beforeFile) {
     const pages = store.config.pages;
     const idx = pages.findIndex((p) => p.file === file);
@@ -861,23 +1205,73 @@
     if (changedList) showToast(inMenu ? `“${p.title}” now has a link in your website menu.` : `“${p.title}” is no longer in the menu. It’s still on your website.`);
   }
 
+  /** Rename in place: the name turns into a text field. */
+  function startRename(file) {
+    const item = $(`#sidebar .nav-item[data-file="${CSS.escape(file)}"]`) || document.querySelector(`#sidebar [data-file="${CSS.escape(file)}"] .nav-item`);
+    const meta = docMeta(file);
+    if (!item || !meta) return;
+    const nameEl = item.querySelector('.nav-item__name');
+    const input = el('input', 'nav-item__input');
+    input.type = 'text';
+    input.value = meta.title;
+    input.maxLength = postMeta(file) ? 140 : 80;
+    input.setAttribute('aria-label', 'New name');
+    item.classList.add('is-renaming');
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = (save) => {
+      if (done) return;
+      done = true;
+      if (save) renameDoc(file, input.value);
+      renderSidebar();
+      if (save && file === store.current) renderInspector();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  let lastClick = { file: '', time: 0 };
+
   function wireSidebar() {
-    const side = document.querySelector('.sidebar');
+    const side = $('#sidebar');
     side.addEventListener('click', (e) => {
+      if (e.target.closest('.nav-item__input')) return;
       const move = e.target.closest('[data-move]');
       if (move) { const p = pageMeta(move.dataset.move); movePage(p.file, !p.showInNavbar); return; }
-      if (e.target.closest('[data-toggle-blog]')) {
-        blogExpanded = !blogExpanded;
-        try { sessionStorage.setItem('pebble:blog-open', blogExpanded ? '1' : '0'); } catch { /* ignore */ }
-        renderSidebar();
-        return;
+      const ren = e.target.closest('[data-rename]');
+      if (ren) { startRename(ren.dataset.rename); return; }
+      if (e.target.closest('#btn-blog-back')) { sidebarPane = 'pages'; renderSidebar(); return; }
+      if (e.target.closest('#btn-new-post')) { openNewDocDialog('post'); return; }
+      const open = e.target.closest('[data-open]');
+      if (open) {
+        // Double-click to rename. (The list is redrawn after the first click,
+        // so the browser's own dblclick doesn't always arrive.)
+        const now = Date.now();
+        const file = open.dataset.open;
+        if (lastClick.file === file && now - lastClick.time < 450 && docMeta(file) && e.target.closest('.nav-item__name')) {
+          lastClick = { file: '', time: 0 };
+          startRename(file);
+          return;
+        }
+        lastClick = { file, time: now };
+        if (open.dataset.openBlog) sidebarPane = 'blog';
+        if (open.dataset.open !== store.current) openDoc(open.dataset.open);
+        else renderSidebar();
       }
-      if (e.target.closest('[data-new-post]')) { openNewDocDialog('post'); return; }
-      const btn = e.target.closest('.page-item');
-      if (btn && btn.dataset.file !== store.current) openDoc(btn.dataset.file);
+    });
+    side.addEventListener('dblclick', (e) => {
+      const name = e.target.closest('.nav-item__name');
+      const item = name && name.closest('.nav-item');
+      if (item && docMeta(item.dataset.file)) startRename(item.dataset.file);
     });
 
-    // Drag & drop between "Main Menu" and "Other Pages" (and to reorder the menu).
+    // Drag & drop between "Main Menu" and "Other Pages".
     let dragging = null;
     const clearMarks = () => side.querySelectorAll('.drop-before, .drop-end').forEach((n) => n.classList.remove('drop-before', 'drop-end'));
     side.addEventListener('dragstart', (e) => {
@@ -921,13 +1315,10 @@
 
   /* ========================================================================
      8. FLOATING TEXT TOOLBAR
-     Appears above the text box she's typing in (or pinned under the top
-     bar when there's no room), and disappears when she leaves the text.
      ======================================================================== */
 
-  let toolbarEditor = null;   // the text area the toolbar works on
-  let savedRange = null;      // her selection, kept while she uses the dropdown
-
+  let toolbarEditor = null;
+  let savedRange = null;
   const toolbar = () => $('#text-toolbar');
 
   function activeTextEditor() {
@@ -948,7 +1339,6 @@
     }
   }
 
-  /** The paragraph/heading elements the selection touches. */
   function blocksInSelection(editor) {
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount) return [];
@@ -956,7 +1346,6 @@
     const all = Array.from(editor.querySelectorAll('p, h1, h2, h3, li, blockquote')).filter((b) => !b.querySelector('p, h1, h2, h3, li'));
     let hit = all.filter((b) => range.intersectsNode(b));
     if (!hit.length) {
-      // Loose text directly in the box: wrap it in a paragraph first.
       document.execCommand('formatBlock', false, 'p');
       hit = Array.from(editor.querySelectorAll('p, h1, h2, h3, li, blockquote')).filter((b) => window.getSelection().getRangeAt(0).intersectsNode(b));
     }
@@ -1011,8 +1400,7 @@
 
   function applyTextStyle(key) {
     restoreRange();
-    const def = F.TEXT_STYLES[key];
-    document.execCommand('formatBlock', false, def.tag);
+    document.execCommand('formatBlock', false, F.TEXT_STYLES[key].tag);
     blocksInSelection(toolbarEditor).forEach((b) => b.classList.toggle('text-small', key === 'small'));
   }
 
@@ -1028,7 +1416,6 @@
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) { showToast('First select (highlight) the words you want to color.'); return; }
     const range = sel.getRangeAt(0);
-    // Remove existing highlights in the selection first.
     toolbarEditor.querySelectorAll('mark, span[style*="background"]').forEach((m) => {
       if (range.intersectsNode(m)) m.replaceWith(...m.childNodes);
     });
@@ -1053,7 +1440,7 @@
     const h = tb.offsetHeight;
     let top = box.top - h - 10;
     tb.classList.toggle('is-pinned', top < topLimit);
-    if (top < topLimit) top = topLimit; // no room above: pin it under the top bar
+    if (top < topLimit) top = topLimit;
     const left = Math.max(8, Math.min(box.left, window.innerWidth - tb.offsetWidth - 8));
     tb.style.top = `${top}px`;
     tb.style.left = `${left}px`;
@@ -1061,8 +1448,7 @@
 
   function showToolbar(editor) {
     toolbarEditor = editor;
-    const tb = toolbar();
-    tb.hidden = false;
+    toolbar().hidden = false;
     renderStyleOptions();
     updateToolbarState();
     positionToolbar();
@@ -1104,20 +1490,16 @@
 
   function wireToolbar() {
     const tb = toolbar();
-
-    // Highlight palette
     const palette = $('#tt-palette');
     for (const [name, h] of Object.entries(F.HIGHLIGHTS)) {
       const b = el('button', 'tt-swatch');
       b.type = 'button';
       b.dataset.highlight = name;
       b.style.background = h.color;
-      b.title = h.label;
+      b.title = `${h.label} highlight`;
       b.setAttribute('aria-label', `${h.label} highlight`);
       palette.insertBefore(b, palette.lastElementChild);
     }
-
-    // Keep the text selection when clicking toolbar buttons.
     tb.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
     tb.addEventListener('click', (e) => {
       const btn = e.target.closest('button');
@@ -1129,7 +1511,6 @@
     });
     $('#tt-style').addEventListener('change', (e) => { applyTextStyle(e.target.value); afterToolbarChange(); });
 
-    // Show when a text box is focused; hide when she leaves it.
     document.addEventListener('focusin', (e) => {
       const ed = e.target.closest && e.target.closest('.text-editor');
       if (ed) showToolbar(ed);
@@ -1141,7 +1522,6 @@
         hideToolbar();
       }, 0);
     });
-    // Also follow the text cursor itself (doesn't depend on focus events).
     document.addEventListener('selectionchange', () => {
       const ed = activeTextEditor();
       if (ed && ed !== toolbarEditor && ed.isContentEditable) showToolbar(ed);
@@ -1157,20 +1537,17 @@
   }
 
   /* ========================================================================
-     9. INSPECTOR — the right-hand settings panel
-     Shows the clicked box's settings; with nothing selected, the settings
-     of the page / post / Header / Footer being edited.
+     9. INSPECTOR
      ======================================================================== */
 
   function linkOptions(allowNone) {
-    const opts = [['', allowNone || '— Choose a page —']];
-    for (const p of store.config.pages) opts.push([p.file, `📄 ${p.title}`]);
-    for (const p of F.sortedPosts(store.config)) opts.push([p.file, `📰 ${p.title}`]);
-    opts.push(['__external__', '🌐 Another website…']);
+    const opts = [['', allowNone || 'Choose a page…']];
+    for (const p of store.config.pages) opts.push([p.file, `Page: ${p.title}`]);
+    for (const p of F.sortedPosts(store.config)) opts.push([p.file, `Blog post: ${p.title}`]);
+    opts.push(['__external__', 'Another website…']);
     return opts;
   }
 
-  /** Build one Inspector field. onChange(value) applies it. */
   function inspectorField(f, value, onChange) {
     if (f.type === 'note') return el('p', 'insp-note', f.text);
     const row = el('div', 'insp-field');
@@ -1229,7 +1606,7 @@
       const box = el('div', 'insp-colors');
       const t = F.normalizeTheme(store.config.theme);
       const choices = [['', f.defaultLabel || 'Default'], [t.primaryColor, 'Main color'], [t.secondaryColor, 'Second color'],
-        ['#ffffff', 'White'], ['#f7f3ec', 'Cream'], ['#eef3f8', 'Light blue'], ['#2d2a26', 'Dark']];
+        ['#ffffff', 'White'], ['#f7f3ec', 'Cream'], ['#eef3f8', 'Light blue'], ['#2d2a26', 'Dark'], ['#000000', 'Black']];
       const draw = (current) => {
         box.innerHTML = '';
         for (const [c, name] of choices) {
@@ -1237,12 +1614,13 @@
           b.type = 'button';
           b.title = name;
           b.setAttribute('aria-label', name);
-          if (c) b.style.background = c; else b.textContent = '∅';
+          if (c) b.style.background = c; else b.innerHTML = icon('ban');
           b.addEventListener('click', () => { onChange(c); draw(c); });
           box.appendChild(b);
         }
-        const custom = el('label', 'insp-swatch insp-swatch--custom', '＋');
+        const custom = el('label', 'insp-swatch insp-swatch--custom');
         custom.title = 'Pick any color';
+        custom.innerHTML = icon('pipette');
         const pick = el('input');
         pick.type = 'color';
         pick.value = current || '#ffffff';
@@ -1250,6 +1628,7 @@
         pick.addEventListener('input', () => { onChange(pick.value); box.querySelectorAll('.is-on').forEach((n) => n.classList.remove('is-on')); });
         custom.appendChild(pick);
         box.appendChild(custom);
+        renderIcons();
       };
       draw(value);
       row.appendChild(box);
@@ -1259,21 +1638,29 @@
       cb.type = 'checkbox';
       cb.checked = value === '' || value == null;
       useSite.append(cb, document.createTextNode(' Same as the rest of the website'));
+      const rangeRow = el('div', 'insp-rangerow');
       const range = el('input', 'insp-range');
       range.type = 'range';
       range.min = 0;
       range.max = 40;
       range.value = value === '' || value == null ? F.normalizeTheme(store.config.theme).borderRadius : value;
-      range.hidden = cb.checked;
-      const labels = el('div', 'range-labels');
-      labels.innerHTML = '<span>Square</span><span>Round</span>';
-      labels.hidden = cb.checked;
-      cb.addEventListener('change', () => {
-        range.hidden = labels.hidden = cb.checked;
-        onChange(cb.checked ? '' : parseInt(range.value, 10));
-      });
-      range.addEventListener('input', () => onChange(parseInt(range.value, 10)));
-      row.append(useSite, range, labels);
+      const out = el('output', 'insp-out', `${range.value} px`);
+      rangeRow.append(range, out);
+      rangeRow.hidden = cb.checked;
+      cb.addEventListener('change', () => { rangeRow.hidden = cb.checked; onChange(cb.checked ? '' : parseInt(range.value, 10)); });
+      range.addEventListener('input', () => { out.textContent = `${range.value} px`; onChange(parseInt(range.value, 10)); });
+      row.append(useSite, rangeRow);
+    } else if (f.type === 'range') {
+      const rangeRow = el('div', 'insp-rangerow');
+      const range = el('input', 'insp-range');
+      range.type = 'range';
+      range.min = f.min; range.max = f.max; range.step = f.step || 1;
+      range.value = value;
+      range.id = id;
+      const out = el('output', 'insp-out', `${value}${f.unit || ''}`);
+      range.addEventListener('input', () => { out.textContent = `${range.value}${f.unit || ''}`; onChange(parseInt(range.value, 10)); });
+      rangeRow.append(range, out);
+      row.appendChild(rangeRow);
     } else if (f.type === 'photo') {
       const box = el('div', 'insp-photo');
       if (value) {
@@ -1285,8 +1672,9 @@
         box.appendChild(el('span', 'insp-photo__none', 'No photo yet'));
       }
       const actions = el('div', 'insp-photo__actions');
-      const pick = el('button', 'btn btn--secondary btn--small', value ? '🔄 Replace photo' : '📷 Choose a photo');
+      const pick = el('button', 'btn btn--secondary btn--small');
       pick.type = 'button';
+      pick.innerHTML = `${icon(value ? 'refresh-cw' : 'image-plus')}<span>${value ? 'Replace photo' : 'Choose a photo'}</span>`;
       pick.addEventListener('click', () => openMediaLibrary({ current: value, onPick: (p) => { onChange(p); renderInspector(); } }));
       actions.appendChild(pick);
       if (f.removable && value) {
@@ -1299,7 +1687,7 @@
     } else if (f.type === 'code') {
       if (f.warning) {
         const warn = el('div', 'settings-warning');
-        warn.appendChild(el('strong', '', '⚠️ Careful'));
+        warn.innerHTML = `<strong>${icon('triangle-alert')}<span>Careful</span></strong>`;
         warn.appendChild(el('span', '', f.warning));
         row.insertBefore(warn, label);
       }
@@ -1333,82 +1721,138 @@
     return row;
   }
 
-  /** Keep an Inspector input in step when the same value is edited on the canvas. */
   function syncInspectorField(key, value) {
     const input = document.querySelector(`#inspector [data-key="${key}"]`);
     if (input && document.activeElement !== input) input.value = value;
+  }
+
+  function inspectorHead(iconName, title, onClose) {
+    const head = el('div', 'insp-head');
+    head.innerHTML = icon(iconName, 'insp-head__icon');
+    head.appendChild(el('h2', 'insp-head__title', title));
+    if (onClose) {
+      const close = iconButton('x', 'Done', 'insp-head__close');
+      close.addEventListener('click', onClose);
+      head.appendChild(close);
+    }
+    return head;
   }
 
   function renderInspector() {
     const body = $('#inspector-body');
     body.innerHTML = '';
     if (selected && selected.isConnected) renderBlockInspector(body, selected);
+    else if (selectedSection && sectionInfo.has(selectedSection)) renderSectionInspector(body, selectedSection);
     else renderDocInspector(body);
+    renderIcons();
   }
 
   function renderBlockInspector(body, item) {
     const type = item.dataset.widgetType;
     const ed = EDITORS[type];
     const node = editorOf(item);
-    const head = el('div', 'insp-head');
-    head.append(el('span', 'insp-head__icon', ed.icon), el('h2', 'insp-head__title', ed.label));
-    const close = el('button', 'insp-head__close', '✕');
-    close.type = 'button';
-    close.title = 'Done with this box';
-    close.addEventListener('click', () => selectBlock(null));
-    head.appendChild(close);
-    body.appendChild(head);
-
+    body.appendChild(inspectorHead(ed.icon, ed.label, () => selectBlock(null)));
     const data = ed.read(node);
     for (const f of ed.inspector || []) {
       body.appendChild(inspectorField(f, data[f.key], (value) => {
-        const current = ed.read(node);       // pick up what she typed on the canvas
+        const current = ed.read(node);
         current[f.key] = value;
         node._data = { ...node._data, ...current };
         node._render();
+        renderIcons();
         markDirty();
       }));
     }
-
-    const remove = el('button', 'insp-remove', '🗑 Remove this box');
+    const remove = el('button', 'insp-remove');
     remove.type = 'button';
+    remove.innerHTML = `${icon('trash-2')}<span>Remove this block</span>`;
     remove.addEventListener('click', () => removeBlock(item));
+    body.appendChild(remove);
+  }
+
+  /** Settings of one section: background, overlay, text colour, row layout. */
+  function renderSectionInspector(body, id) {
+    const info = sectionInfo.get(id);
+    const pos = sectionPos(id);
+    body.appendChild(inspectorHead('rows-3', 'Section', () => selectSection(null)));
+    const secEl = canvasEl().querySelector(`.ed-section[data-section="${id}"]`);
+    const update = (patch) => {
+      info.style = F.normalizeSectionStyle({ ...info.style, ...patch });
+      paintSection(secEl, info);
+      markDirty();
+    };
+
+    // Row layout (side by side)
+    const layout = el('div', 'insp-field');
+    layout.appendChild(el('span', 'insp-label', 'Layout of this row'));
+    const tiles = el('div', 'layout-tiles');
+    const current = canvasEl().querySelectorAll(':scope > .ed-row')[pos[0]].querySelectorAll(':scope > .ed-section');
+    const currentWidths = Array.from(current).map((n) => sectionInfo.get(n.dataset.section).width).join('-');
+    for (const [key, l] of Object.entries(F.ROW_LAYOUTS)) {
+      const b = el('button', 'layout-tile' + (l.widths.join('-') === currentWidths ? ' is-on' : ''));
+      b.type = 'button';
+      b.title = l.label;
+      b.setAttribute('aria-label', l.label);
+      b.innerHTML = `<span class="layout-tile__cols" style="grid-template-columns:${l.widths.map((w) => `${w}fr`).join(' ')}">${l.widths.map(() => '<span></span>').join('')}</span>`;
+      b.addEventListener('click', () => setRowLayout(pos[0], key));
+      tiles.appendChild(b);
+    }
+    layout.appendChild(tiles);
+    layout.appendChild(el('p', 'insp-help', 'Put sections side by side, like a wide main part with a narrow column next to it. Blocks are never lost when you change this.'));
+    body.appendChild(layout);
+
+    const st = F.normalizeSectionStyle(info.style);
+    body.appendChild(inspectorField({ key: 'bgColor', type: 'color', label: 'Background color', defaultLabel: 'None' }, st.bgColor, (v) => update({ bgColor: v })));
+    body.appendChild(inspectorField({ key: 'bgImage', type: 'photo', label: 'Background photo', removable: true }, st.bgImage, (v) => { update({ bgImage: v, overlayOpacity: v && !st.overlayOpacity ? 30 : info.style.overlayOpacity }); }));
+    body.appendChild(inspectorField({ key: 'overlayColor', type: 'color', label: 'Color over the photo', defaultLabel: 'None' }, st.overlayOpacity ? st.overlayColor : '', (v) => update(v ? { overlayColor: v, overlayOpacity: info.style.overlayOpacity || 40 } : { overlayOpacity: 0 })));
+    body.appendChild(inspectorField({ key: 'overlayOpacity', type: 'range', label: 'Strength of the color', min: 0, max: 90, step: 5, unit: ' %' }, st.overlayOpacity, (v) => update({ overlayOpacity: v })));
+    body.appendChild(inspectorField({ key: 'tone', type: 'select', label: 'Text color', options: [['dark', 'Dark text (for light backgrounds)'], ['light', 'Light text (for dark backgrounds or photos)']] }, st.tone, (v) => update({ tone: v })));
+
+    const actions = el('div', 'insp-actions');
+    const mk = (ic, label, fn) => { const b = el('button', 'btn btn--secondary btn--small'); b.type = 'button'; b.innerHTML = `${icon(ic)}<span>${label}</span>`; b.addEventListener('click', fn); actions.appendChild(b); };
+    mk('arrow-up', 'Move up', () => moveRow(pos[0], -1));
+    mk('arrow-down', 'Move down', () => moveRow(pos[0], +1));
+    body.appendChild(actions);
+    const remove = el('button', 'insp-remove');
+    remove.type = 'button';
+    remove.innerHTML = `${icon('trash-2')}<span>Remove this section</span>`;
+    remove.addEventListener('click', () => removeSection(id));
     body.appendChild(remove);
   }
 
   function renderDocInspector(body) {
     const kind = currentKind();
     const file = store.current;
-    const head = el('div', 'insp-head');
-    const icons = { page: '📄', post: '✏️', header: '⬆️', footer: '⬇️' };
+    const icons = { page: 'file', post: 'file-text', header: 'panel-top', footer: 'panel-bottom' };
     const titles = { page: 'Page settings', post: 'Blog post', header: 'Header', footer: 'Footer' };
-    head.append(el('span', 'insp-head__icon', icons[kind]), el('h2', 'insp-head__title', titles[kind]));
-    body.appendChild(head);
+    body.appendChild(inspectorHead(icons[kind], titles[kind]));
 
     if (kind === 'page') {
       const meta = pageMeta(file);
+      body.appendChild(inspectorField({ key: 'title', type: 'text', label: 'Page name' }, meta.title, (v) => { if (v.trim()) renameDoc(file, v); }));
       body.appendChild(el('p', 'insp-note', `Web address ends in ${file}`));
       const where = el('div', 'insp-field');
       where.appendChild(el('span', 'insp-label', 'Where this page is listed'));
-      where.appendChild(el('p', 'insp-value', meta.showInNavbar ? '✓ In the Main Menu (it has a link in your website menu)' : 'In Other Pages (no link in the menu)'));
+      where.appendChild(el('p', 'insp-value', meta.showInNavbar ? 'In the Main Menu (it has a link in your website menu)' : 'In Other Pages (no link in the menu)'));
       const move = el('button', 'btn btn--secondary btn--small', meta.showInNavbar ? 'Move to Other Pages' : 'Add to the Main Menu');
       move.type = 'button';
       move.addEventListener('click', () => movePage(file, !meta.showInNavbar));
       where.appendChild(move);
       body.appendChild(where);
-      if (file === blogPageFile()) body.appendChild(el('p', 'insp-note', '📰 This is your blog page. Your posts are listed under it on the left.'));
+      if (file === blogPageFile()) body.appendChild(el('p', 'insp-note', 'This is your blog page. Your posts are listed under it in the sidebar.'));
     } else if (kind === 'post') {
       const meta = postMeta(file);
       const update = (patch) => { Object.assign(meta, patch); renderRegionPreviews(); markDirty(); };
+      body.appendChild(inspectorField({ key: 'title', type: 'text', label: 'Post title' }, meta.title, (v) => { if (v.trim()) { renameDoc(file, v); renderRegionPreviews(); } }));
       body.appendChild(inspectorField({ key: 'date', type: 'date', label: 'Date' }, meta.date, (v) => { if (/^\d{4}-\d{2}-\d{2}$/.test(v)) update({ date: v }); }));
       body.appendChild(inspectorField({ key: 'thumbnail', type: 'photo', label: 'Cover photo', removable: true }, meta.thumbnail, (v) => update({ thumbnail: v })));
       body.appendChild(inspectorField({ key: 'excerpt', type: 'textarea', label: 'Short summary', placeholder: 'Leave empty and Pebble uses the first words of your post', help: 'Shown under the post on your blog page.' },
         meta.excerptAuto ? '' : meta.excerpt, (v) => update({ excerpt: v.trim(), excerptAuto: !v.trim() })));
     } else if (kind === 'header') {
-      body.appendChild(el('p', 'insp-note', 'The Header is the top of every page: your website name, the menu, and anything else you add here appears on all pages and blog posts.'));
+      body.appendChild(el('p', 'insp-note', 'The Header is the top of every page: your website name or logo, the menu, and anything else you add here. On phones the menu folds into a menu button.'));
       const hero = F.normalizeHero(store.config.header && store.config.header.hero);
       const section = el('div', 'insp-section');
-      section.appendChild(el('h3', 'insp-section__title', '🌄 Hero image'));
+      section.appendChild(el('h3', 'insp-section__title', 'Hero image'));
       section.appendChild(el('p', 'insp-help', 'A big photo at the top of every page.'));
       section.appendChild(inspectorField({ key: 'heroSrc', type: 'photo', label: 'Photo' }, hero.src, (v) => updateHero({ src: v, enabled: !!v })));
       if (hero.src) {
@@ -1420,26 +1864,50 @@
     } else if (kind === 'footer') {
       body.appendChild(el('p', 'insp-note', 'The Footer is the bottom of every page. Good places for: a copyright line, your email address, or links to other pages.'));
     }
-    body.appendChild(el('p', 'insp-tip', '💡 Click a box on the page to change its settings here.'));
+    const tip = el('p', 'insp-tip');
+    tip.innerHTML = `${icon('mouse-pointer-2')}<span>${kind === 'page' || kind === 'post' ? 'Click a block or a section to change its settings here. Hover over the page and press + to add sections and blocks.' : 'Click a block to change its settings here.'}</span>`;
+    body.appendChild(tip);
   }
 
   /* ========================================================================
-     10. SITE SETTINGS — colours, fonts, text styles, roundness, spacing
+     10. SITE SETTINGS
      ======================================================================== */
 
   function applyTheme() {
     $('#site-theme').textContent = F.globalCss(store.config.theme, store.baseCss, store.config.typography);
     $('#site-custom').textContent = store.customCss || '';
     const spacing = F.normalizeTheme(store.config.theme).blockSpacing;
-    if (grid && grid.getMargin() !== spacing / 2) grid.margin(spacing / 2);
+    for (const g of allGrids()) if (g.getMargin() !== spacing / 2) g.margin(spacing / 2);
   }
 
   const COLOR_SWATCHES = {
     primary: ['#b85c38', '#2f6fdf', '#1f8a4c', '#8e44ad', '#c0392b', '#1d3557', '#d4a017', '#2d2a26'],
     secondary: ['#6b8b4f', '#e9a03b', '#3aa8a0', '#d76a85', '#7a8ca3', '#a0522d', '#5c6bc0', '#b5838d'],
   };
-
   const WEIGHT_NAMES = { 300: 'Light', 400: 'Normal', 500: 'Medium', 600: 'Semi-bold', 700: 'Bold', 800: 'Extra bold', 900: 'Black' };
+
+  /** Font <option>s: the list, plus her own font when she added one. */
+  function fontOptions(select, { inherit } = {}) {
+    select.innerHTML = '';
+    const ty = F.normalizeTypography(store.config.typography);
+    if (inherit) {
+      const site = F.normalizeTheme(store.config.theme).fontFamily;
+      const siteLabel = site === 'custom' && ty.customFont ? ty.customFont.name : (F.FONTS[site] || F.FONTS.classic).label;
+      const o = el('option', '', `Website font (${siteLabel})`);
+      o.value = '';
+      select.appendChild(o);
+    }
+    for (const [key, f] of Object.entries(F.FONTS)) {
+      const o = el('option', '', f.label);
+      o.value = key;
+      select.appendChild(o);
+    }
+    if (ty.customFont) {
+      const o = el('option', '', `${ty.customFont.name} (your own font)`);
+      o.value = 'custom';
+      select.appendChild(o);
+    }
+  }
 
   function renderSettings() {
     const t = F.normalizeTheme(store.config.theme);
@@ -1450,22 +1918,84 @@
       $(`#set-${which}`).value = value;
       document.querySelectorAll(`[data-swatch="${which}"]`).forEach((b) => b.classList.toggle('is-on', b.dataset.color === value));
     }
-    // Fonts: the list, plus the custom font if there is one
-    const font = $('#set-font');
-    const customOpt = font.querySelector('option[value="custom"]');
-    if (ty.customFont) { customOpt.hidden = false; customOpt.textContent = `${ty.customFont.name} (your own font)`; } else customOpt.hidden = true;
-    font.value = t.fontFamily === 'custom' && !ty.customFont ? 'classic' : t.fontFamily;
-    $('#custom-font-status').textContent = ty.customFont ? `✓ Using “${ty.customFont.name}”` : '';
-    $('#custom-font-status').className = 'custom-font__status' + (ty.customFont ? ' is-ok' : '');
+    fontOptions($('#set-font'));
+    $('#set-font').value = t.fontFamily === 'custom' && !ty.customFont ? 'classic' : t.fontFamily;
+    const status = $('#custom-font-status');
+    status.textContent = ty.customFont ? `Using “${ty.customFont.name}”` : '';
+    status.className = 'custom-font__status' + (ty.customFont ? ' is-ok' : '');
     $('#btn-custom-font-clear').hidden = !ty.customFont;
-
     $('#set-radius').value = t.borderRadius;
+    $('#out-radius').textContent = `${t.borderRadius} px`;
     $('#set-spacing').value = t.blockSpacing;
+    $('#out-spacing').textContent = `${t.blockSpacing} px`;
     $('#set-custom-css').value = store.customCss || '';
+    renderBranding();
     renderTextStyleSettings();
+    renderIcons();
   }
 
-  /** The five text styles, each with name / size / line spacing / boldness. */
+  /** Branding: logo (in the header, also in the photo library) and favicon. */
+  function renderBranding() {
+    const b = F.normalizeBranding(store.config.branding);
+    const box = $('#branding');
+    box.innerHTML = '';
+    const set = (patch) => {
+      store.config.branding = F.normalizeBranding({ ...store.config.branding, ...patch });
+      refreshLiveBlocks();
+      renderRegionPreviews();
+      markDirty();
+      renderBranding();
+    };
+    const picker = (label, value, help, onPick, cls) => {
+      const row = el('div', 'brand-pick');
+      row.appendChild(el('span', 'settings-sublabel', label));
+      const prev = el('div', `brand-pick__preview ${cls}`);
+      if (value) { const img = el('img'); img.alt = ''; showImage(img, value); prev.appendChild(img); }
+      else prev.innerHTML = icon('image');
+      const actions = el('div', 'brand-pick__actions');
+      const choose = el('button', 'btn btn--secondary btn--small');
+      choose.type = 'button';
+      choose.innerHTML = `${icon('upload')}<span>${value ? 'Replace' : 'Upload or choose'}</span>`;
+      choose.addEventListener('click', () => openMediaLibrary({ current: value, onPick }));
+      actions.appendChild(choose);
+      if (value) {
+        const rm = el('button', 'link-btn link-btn--inline', 'Remove');
+        rm.type = 'button';
+        rm.addEventListener('click', () => onPick(''));
+        actions.appendChild(rm);
+      }
+      row.append(prev, actions);
+      if (help) row.appendChild(el('p', 'settings-help', help));
+      return row;
+    };
+    box.appendChild(picker('Logo', b.logo, 'Shown in your Header. It’s also kept in your photo library.', (p) => set({ logo: p }), 'brand-pick__preview--logo'));
+    if (b.logo) {
+      const mode = el('select', 'settings-input');
+      mode.setAttribute('aria-label', 'How to show the logo');
+      for (const [v, t] of [['logo-name', 'Logo and website name'], ['logo', 'Logo only']]) { const o = el('option', '', t); o.value = v; mode.appendChild(o); }
+      mode.value = b.logoMode;
+      mode.addEventListener('change', () => set({ logoMode: mode.value }));
+      box.appendChild(mode);
+      const rr = el('div', 'settings-rangerow');
+      const range = el('input', 'settings-range');
+      range.type = 'range'; range.min = 16; range.max = 140; range.value = b.logoHeight;
+      range.setAttribute('aria-label', 'Logo size');
+      const out = el('output', 'settings-out', `${b.logoHeight} px`);
+      range.addEventListener('input', () => {
+        out.textContent = `${range.value} px`;
+        store.config.branding = F.normalizeBranding({ ...store.config.branding, logoHeight: range.value });
+        refreshLiveBlocks();
+        renderRegionPreviews();
+        markDirty();
+      });
+      const lab = el('span', 'settings-sublabel', 'Logo size');
+      rr.append(range, out);
+      box.append(lab, rr);
+    }
+    box.appendChild(picker('Favicon', b.favicon, 'The little picture in the browser tab. A small square image works best.', (p) => set({ favicon: p }), 'brand-pick__preview--favicon'));
+    renderIcons();
+  }
+
   function renderTextStyleSettings() {
     const box = $('#text-styles');
     const ty = F.normalizeTypography(store.config.typography);
@@ -1478,9 +2008,9 @@
       if (key === openKey) d.open = true;
       const sum = el('summary', 'text-style__summary');
       const sample = el('span', 'text-style__sample', s.name);
-      sample.style.fontSize = `${Math.min(s.size, 30)}px`;
+      sample.style.fontSize = `${Math.min(s.size, 28)}px`;
       sample.style.fontWeight = s.weight;
-      sample.style.fontFamily = 'var(--font-family)';
+      sample.style.fontFamily = `var(--text-${key}-font)`;
       sum.append(sample, el('span', 'text-style__meta', `${s.size}px · ${WEIGHT_NAMES[s.weight] || s.weight}`));
       d.appendChild(sum);
 
@@ -1491,22 +2021,26 @@
       name.type = 'text';
       name.maxLength = 30;
       name.value = s.name;
-      name.addEventListener('input', () => updateTextStyle(key, { name: name.value || def.name }, false));
+      name.addEventListener('input', () => updateTextStyle(key, { name: name.value || def.name }));
       rows.appendChild(field('Name', name));
 
-      const size = el('input', 'settings-range');
-      size.type = 'range'; size.min = 10; size.max = 96; size.value = s.size;
-      const sizeOut = el('output', 'text-style__out', `${s.size}px`);
-      size.addEventListener('input', () => { sizeOut.textContent = `${size.value}px`; updateTextStyle(key, { size: size.value }); });
-      const sizeWrap = el('div', 'text-style__range'); sizeWrap.append(size, sizeOut);
-      rows.appendChild(field('Size', sizeWrap));
+      const font = el('select', 'settings-input');
+      fontOptions(font, { inherit: true });
+      font.value = s.font || '';
+      font.addEventListener('change', () => updateTextStyle(key, { font: font.value }));
+      rows.appendChild(field('Font', font));
 
-      const lh = el('input', 'settings-range');
-      lh.type = 'range'; lh.min = 0.9; lh.max = 2.4; lh.step = 0.05; lh.value = s.lineHeight;
-      const lhOut = el('output', 'text-style__out', String(s.lineHeight));
-      lh.addEventListener('input', () => { lhOut.textContent = lh.value; updateTextStyle(key, { lineHeight: lh.value }); });
-      const lhWrap = el('div', 'text-style__range'); lhWrap.append(lh, lhOut);
-      rows.appendChild(field('Line spacing', lhWrap));
+      const range = (min, max, step, val, unit, onIn) => {
+        const r = el('input', 'settings-range');
+        r.type = 'range'; r.min = min; r.max = max; r.step = step; r.value = val;
+        const out = el('output', 'settings-out', `${val}${unit}`);
+        r.addEventListener('input', () => { out.textContent = `${r.value}${unit}`; onIn(r.value); });
+        const wrap = el('div', 'settings-rangerow');
+        wrap.append(r, out);
+        return wrap;
+      };
+      rows.appendChild(field('Size', range(10, 96, 1, s.size, ' px', (v) => updateTextStyle(key, { size: v }))));
+      rows.appendChild(field('Line spacing', range(0.9, 2.4, 0.05, s.lineHeight, '', (v) => updateTextStyle(key, { lineHeight: v }))));
 
       const weight = el('select', 'settings-input');
       for (const w of F.WEIGHTS) { const o = el('option', '', WEIGHT_NAMES[w]); o.value = w; weight.appendChild(o); }
@@ -1519,7 +2053,7 @@
     }
   }
 
-  function updateTextStyle(key, patch, redraw = true) {
+  function updateTextStyle(key, patch) {
     const ty = F.normalizeTypography(store.config.typography);
     ty.styles[key] = { ...ty.styles[key], ...patch };
     store.config.typography = F.normalizeTypography(ty);
@@ -1530,11 +2064,11 @@
       const s = store.config.typography.styles[key];
       const sample = d.querySelector('.text-style__sample');
       sample.textContent = s.name;
-      sample.style.fontSize = `${Math.min(s.size, 30)}px`;
+      sample.style.fontSize = `${Math.min(s.size, 28)}px`;
       sample.style.fontWeight = s.weight;
       d.querySelector('.text-style__meta').textContent = `${s.size}px · ${WEIGHT_NAMES[s.weight] || s.weight}`;
     }
-    if (!redraw) renderStyleOptions();
+    renderStyleOptions();
   }
 
   function updateTheme(patch) {
@@ -1563,24 +2097,8 @@
       $(`#set-${which}`).addEventListener('input', (e) => { updateTheme({ [`${which}Color`]: e.target.value }); renderSettings(); });
     }
 
-    // Font list: popular fonts first, older choices after.
-    const font = $('#set-font');
-    const popular = el('optgroup');
-    popular.label = 'Popular fonts';
-    const older = el('optgroup');
-    older.label = 'More';
-    for (const [key, f] of Object.entries(F.FONTS)) {
-      const opt = el('option', '', f.label);
-      opt.value = key;
-      (['elegant', 'friendly', 'rounded', 'typewriter'].includes(key) ? older : popular).appendChild(opt);
-    }
-    const customOpt = el('option', '', 'Your own font');
-    customOpt.value = 'custom';
-    customOpt.hidden = true;
-    font.append(popular, older, customOpt);
-    font.addEventListener('change', () => updateTheme({ fontFamily: font.value }));
+    $('#set-font').addEventListener('change', (e) => { updateTheme({ fontFamily: e.target.value }); renderTextStyleSettings(); });
 
-    // The font escape hatch
     const customInput = $('#set-custom-font');
     const useCustom = () => {
       const parsed = F.parseCustomFont(customInput.value);
@@ -1600,15 +2118,17 @@
     $('#btn-custom-font').addEventListener('click', useCustom);
     customInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); useCustom(); } });
     $('#btn-custom-font-clear').addEventListener('click', () => {
-      store.config.typography = F.normalizeTypography({ ...store.config.typography, customFont: null });
+      const ty = F.normalizeTypography(store.config.typography);
+      for (const s of Object.values(ty.styles)) if (s.font === 'custom') s.font = '';
+      store.config.typography = F.normalizeTypography({ ...ty, customFont: null });
       if (store.config.theme.fontFamily === 'custom') store.config.theme = F.normalizeTheme({ ...store.config.theme, fontFamily: 'classic' });
       applyTheme();
       markDirty();
       renderSettings();
     });
 
-    $('#set-radius').addEventListener('input', (e) => updateTheme({ borderRadius: e.target.value }));
-    $('#set-spacing').addEventListener('input', (e) => updateTheme({ blockSpacing: e.target.value }));
+    $('#set-radius').addEventListener('input', (e) => { $('#out-radius').textContent = `${e.target.value} px`; updateTheme({ borderRadius: e.target.value }); });
+    $('#set-spacing').addEventListener('input', (e) => { $('#out-spacing').textContent = `${e.target.value} px`; updateTheme({ blockSpacing: e.target.value }); });
     $('#set-site-name').addEventListener('input', (e) => {
       store.config.siteName = e.target.value.trim() || 'My website';
       refreshLiveBlocks();
@@ -1634,70 +2154,135 @@
   }
 
   /* ========================================================================
-     11. ADD DRAWER
+     11. LIBRARY — the hover "+" menu
+       between rows   → Sections (layouts) and Blocks (a new section with it)
+       inside a section, Header or Footer → Blocks for that place
+     Tiles can also be dragged straight onto any section.
      ======================================================================== */
 
-  function buildDrawer() {
+  let libraryTarget = null;   // { mode: 'gap', index } | { mode: 'section', id } | { mode: 'region' }
+
+  function buildLibrary() {
+    const sections = $('#lib-sections');
+    for (const [key, l] of Object.entries(F.ROW_LAYOUTS)) {
+      const b = el('button', 'lib-layout');
+      b.type = 'button';
+      b.dataset.layout = key;
+      b.innerHTML = `<span class="layout-tile__cols" style="grid-template-columns:${l.widths.map((w) => `${w}fr`).join(' ')}">${l.widths.map(() => '<span></span>').join('')}</span><span class="lib-layout__label">${F.escapeHtml(l.label)}</span>`;
+      sections.appendChild(b);
+    }
     const groups = [
       ['Basics', ['text', 'image', 'card', 'button']],
       ['Blog', ['blog-feed']],
       ['Website parts', ['site-title', 'menu']],
       ['For website helpers', ['embed']],
     ];
-    const list = $('#add-groups');
+    const blocks = $('#lib-blocks');
     for (const [title, types] of groups) {
-      const group = el('section', 'add-group' + (title === 'For website helpers' ? ' add-group--advanced' : ''));
-      group.appendChild(el('h3', 'add-group__title', title));
+      const group = el('section', 'lib-group' + (title === 'For website helpers' ? ' lib-group--advanced' : ''));
+      group.appendChild(el('h3', 'lib-group__title', title));
+      const list = el('div', 'lib-grid');
       for (const type of types) {
         const ed = EDITORS[type];
-        const tile = el('div', 'add-tile');
+        const tile = el('div', 'lib-tile');
         tile.dataset.widgetType = type;
         tile.setAttribute('gs-w', ed.size.w);
         tile.setAttribute('gs-h', ed.size.h);
         tile.tabIndex = 0;
         tile.setAttribute('role', 'button');
-        tile.innerHTML = `<span class="add-tile__icon" aria-hidden="true">${ed.icon}</span><span class="add-tile__text"><strong></strong><small></small></span>`;
+        tile.innerHTML = `${icon(ed.icon, 'lib-tile__icon')}<span class="lib-tile__text"><strong></strong><small></small></span>`;
         tile.querySelector('strong').textContent = ed.label;
         tile.querySelector('small').textContent = ed.hint;
-        group.appendChild(tile);
+        list.appendChild(tile);
       }
-      list.appendChild(group);
+      group.appendChild(list);
+      blocks.appendChild(group);
     }
+    renderIcons();
   }
 
-  function openDrawer() { $('#add-drawer').hidden = false; $('#btn-add').setAttribute('aria-expanded', 'true'); }
-  function closeDrawer() { $('#add-drawer').hidden = true; $('#btn-add').setAttribute('aria-expanded', 'false'); }
+  function setLibraryTab(tab) {
+    $('#library').dataset.tab = tab;
+    document.querySelectorAll('#library [data-lib-tab]').forEach((b) => { b.classList.toggle('is-active', b.dataset.libTab === tab); b.setAttribute('aria-selected', b.dataset.libTab === tab); });
+  }
+
+  function openLibrary(target, anchor) {
+    libraryTarget = target;
+    const lib = $('#library');
+    lib.dataset.mode = target.mode;
+    lib.querySelectorAll('.lib-tile').forEach((t) => { t.hidden = !allowedHere(t.dataset.widgetType); });
+    lib.querySelectorAll('.lib-group').forEach((g) => { g.hidden = !g.querySelector('.lib-tile:not([hidden])'); });
+    setLibraryTab(target.mode === 'gap' ? 'sections' : 'blocks');
+    $('#lib-title').textContent = target.mode === 'gap' ? 'Add a section' : 'Add a block';
+    lib.hidden = false;
+    // Place it next to the + button, inside the window.
+    const r = anchor.getBoundingClientRect();
+    const w = lib.offsetWidth;
+    const h = lib.offsetHeight;
+    let top = r.bottom + 8;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 8);
+    const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
+    lib.style.top = `${top}px`;
+    lib.style.left = `${left}px`;
+  }
+
+  function closeLibrary() { $('#library').hidden = true; libraryTarget = null; }
 
   function afterAdd(item) {
     markDirty();
-    closeDrawer();
-    selectBlock(item);   // its settings show on the right straight away
+    closeLibrary();
+    selectBlock(item);
   }
 
-  function wireDrawer() {
-    buildDrawer();
-    $('#btn-add').addEventListener('click', () => ($('#add-drawer').hidden ? openDrawer() : closeDrawer()));
-    $('#add-close').addEventListener('click', closeDrawer);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#add-drawer').hidden) closeDrawer(); });
+  function addFromLibrary(type) {
+    const t = libraryTarget;
+    if (!t) return;
+    if (t.mode === 'gap') { closeLibrary(); addRow(t.index, 'one', type); markDirty(); return; }
+    const g = t.mode === 'region' ? regionGrid : grids.get(t.id);
+    const item = addBlock(type, null, null, { grid: g, focus: true });
+    if (item) afterAdd(item);
+  }
 
-    GridStack.setupDragIn('#add-drawer .add-tile', { appendTo: 'body', helper: 'clone' });
-    grid.on('dropped', (_e, _prev, node) => {
-      if (!node || !node.el) return;
-      const { el: dropped, x, y } = node;
-      const type = dropped.dataset.widgetType;
-      grid.removeWidget(dropped, true, false);
-      const item = addBlock(type, null, { x, y }, { focus: true });
-      if (item) afterAdd(item);
+  function wireLibrary() {
+    buildLibrary();
+    const lib = $('#library');
+    lib.addEventListener('click', (e) => {
+      const tab = e.target.closest('[data-lib-tab]');
+      if (tab) { setLibraryTab(tab.dataset.libTab); return; }
+      if (e.target.closest('#lib-close')) { closeLibrary(); return; }
+      const layout = e.target.closest('[data-layout]');
+      if (layout && libraryTarget) { const idx = libraryTarget.index; closeLibrary(); addRow(idx, layout.dataset.layout); return; }
+      const tile = e.target.closest('.lib-tile');
+      if (tile) addFromLibrary(tile.dataset.widgetType);
     });
-    $('#add-groups').addEventListener('click', (e) => {
-      const tile = e.target.closest('.add-tile');
-      if (!tile) return;
-      const item = addBlock(tile.dataset.widgetType, null, null, { focus: true });
-      if (item) afterAdd(item);
+    lib.addEventListener('keydown', (e) => {
+      const tile = e.target.closest('.lib-tile');
+      if (tile && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); addFromLibrary(tile.dataset.widgetType); }
     });
-    $('#add-groups').addEventListener('keydown', (e) => {
-      const tile = e.target.closest('.add-tile');
-      if (tile && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); tile.click(); }
+    document.addEventListener('mousedown', (e) => {
+      if (!lib.hidden && !e.target.closest('#library') && !e.target.closest('.ed-gap__add, .ed-section__add, .ed-section__empty')) closeLibrary();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !lib.hidden) closeLibrary(); });
+
+    // The + buttons on the canvas
+    canvasEl().addEventListener('click', (e) => {
+      const gap = e.target.closest('.ed-gap__add');
+      if (gap) { openLibrary({ mode: 'gap', index: parseInt(gap.dataset.gap, 10) }, gap); return; }
+      const add = e.target.closest('[data-add-block]');
+      if (add) {
+        const id = add.dataset.addBlock;
+        if (id !== 'region') setSelectedSection(id);
+        openLibrary(id === 'region' ? { mode: 'region' } : { mode: 'section', id }, add);
+      }
+    });
+
+    // Dragging a tile straight onto a section: the library steps aside.
+    GridStack.setupDragIn('#library .lib-tile', { appendTo: 'body', helper: 'clone' });
+    lib.addEventListener('mousedown', (e) => { if (e.target.closest('.lib-tile')) setTimeout(() => lib.classList.add('is-dragging'), 120); });
+    // A block dragged into another section never gets "dragstop" from its old grid: tidy up on mouse-up.
+    document.addEventListener('mouseup', () => {
+      lib.classList.remove('is-dragging');
+      setTimeout(() => { if (!document.querySelector('.ui-draggable-dragging, .ui-resizable-resizing')) $('#paper').classList.remove('is-arranging'); }, 50);
     });
   }
 
@@ -1714,9 +2299,10 @@
       btn.disabled = isBusy;
       if (!btn.dataset.label) btn.dataset.label = btn.innerHTML;
       btn.innerHTML = key === which
-        ? `<span class="spinner spinner--small${key === 'save' ? ' spinner--dark' : ''}" aria-hidden="true"></span> ${label}`
+        ? `<span class="spinner spinner--small${key === 'save' ? ' spinner--dark' : ''}" aria-hidden="true"></span><span class="btn__label">${label}</span>`
         : btn.dataset.label;
     }
+    renderIcons();
   }
 
   function friendlyError(err, action) {
@@ -1760,13 +2346,13 @@
     if (isBusy) return;
     flushSave();
     if (!lastPending.length) {
-      showToast(store.draftAhead ? 'Your draft is already saved. Press “Publish live” when you’re ready.' : 'Nothing new to save — your website is up to date.');
+      showToast(store.draftAhead ? 'Your draft is already saved. Press “Publish” when you’re ready.' : 'Nothing new to save — your website is up to date.');
       return;
     }
     setBusy('save', 'Saving…');
     try {
       await commitChangesToDraft();
-      showToast('Draft saved. Only you can see it until you press “Publish live”.');
+      showToast('Draft saved. Only you can see it until you press “Publish”.');
     } catch (err) {
       showToast(friendlyError(err, 'saving'));
     } finally {
@@ -1784,7 +2370,7 @@
       const diff = await service.compareDraftToLive();
       if (!diff.ahead) {
         store.draftAhead = false;
-        showToast('Your website is already up to date. 👍');
+        showToast('Your website is already up to date.');
         return;
       }
       try {
@@ -1843,19 +2429,20 @@
     const paths = files.filter((f) => f.status !== 'removed').map((f) => f.path);
     for (const path of paths) {
       const meta = docMeta(path);
-      if (meta) rows.push(`${postMeta(path) ? '📰' : '📄'} ${F.escapeHtml(meta.title)}${added.has(path) ? ' <span class="tag">new</span>' : ''}`);
+      if (meta) rows.push(`${icon(postMeta(path) ? 'file-text' : 'file')}<span>${F.escapeHtml(meta.title)}</span>${added.has(path) ? '<span class="tag">new</span>' : ''}`);
     }
-    if (paths.some((p) => p === 'header.html' || p === 'footer.html')) rows.push('⬆⬇ Header and footer');
-    if (paths.some((p) => p === 'global.css' || p === 'theme.css')) rows.push('🎨 Your website’s look');
+    if (paths.some((p) => p === 'header.html' || p === 'footer.html')) rows.push(`${icon('panel-top')}<span>Header and footer</span>`);
+    if (paths.some((p) => p === 'global.css' || p === 'theme.css')) rows.push(`${icon('palette')}<span>Your website’s look</span>`);
     const photos = files.filter((f) => f.path.startsWith(service.imageDir + '/') && f.status === 'added').length;
-    if (photos) rows.push(`🖼️ ${photos} new photo${photos > 1 ? 's' : ''}`);
-    if (!rows.length) rows.push('Your latest changes');
+    if (photos) rows.push(`${icon('image')}<span>${photos} new photo${photos > 1 ? 's' : ''}</span>`);
+    if (!rows.length) rows.push(`${icon('check')}<span>Your latest changes</span>`);
     $('#publish-list').innerHTML = rows.map((r) => `<li>${r}</li>`).join('');
     const link = $('#publish-url');
     link.href = service.siteUrl;
     link.textContent = service.siteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
     $('#publish-demo-note').hidden = !service.isDemo;
     $('#publish-dialog').showModal();
+    renderIcons();
   }
 
   /* ========================================================================
@@ -1934,7 +2521,7 @@
       const images = await service.fetchImageLibrary(readRef());
       images.forEach((im) => list.appendChild(mediaThumb(im)));
       status.hidden = images.length > 0;
-      if (!images.length) status.textContent = 'No photos yet. Add your first one above!';
+      if (!images.length) status.textContent = 'No photos yet. Add your first one above.';
     } catch (err) {
       console.error('Pebble: photo library failed', err);
       status.innerHTML = 'Sorry, your photos could not be loaded. <button type="button" class="link-btn link-btn--inline" id="media-retry">Try again</button>';
@@ -1950,7 +2537,7 @@
     const img = el('img');
     img.alt = '';
     showImage(img, path);
-    btn.append(img, el('span', 'media-thumb__label', path === mediaState.current ? '✓ In use here' : name.replace(/^\d{8}-\d{6}-/, '').replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ')));
+    btn.append(img, el('span', 'media-thumb__label', path === mediaState.current ? 'In use here' : name.replace(/^\d{8}-\d{6}-/, '').replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ')));
     return btn;
   }
 
@@ -1972,7 +2559,7 @@
       const path = await uploadPhoto(file);
       tile.remove();
       pickFromLibrary(path);
-      showToast('Photo added. ✓');
+      showToast('Photo added.');
     } catch (err) {
       tile.remove();
       if (!list.children.length) loadMediaLibrary();
@@ -1996,7 +2583,7 @@
   }
 
   /* ========================================================================
-     14. PREVIEW — the real stitched page in a sandboxed frame (no scripts)
+     14. PREVIEW — the real stitched page, sandboxed (no scripts)
      ======================================================================== */
 
   function wirePreview() {
@@ -2011,7 +2598,7 @@
       const doc = store.docs[file];
       const css = F.globalCss(store.config.theme, store.baseCss, store.config.typography) + '\n' + (store.customCss || '');
       const config = JSON.parse(files['site-config.json']);
-      frame.srcdoc = F.stitchPage({ file, kind: doc.kind, blocks: doc.blocks },
+      frame.srcdoc = F.stitchPage({ file, kind: doc.kind, rows: doc.rows || F.rowsFromBlocks(doc.blocks) },
         { config, header: store.docs['header.html'].blocks, footer: store.docs['footer.html'].blocks }, { inlineCss: css });
     };
 
@@ -2081,8 +2668,6 @@
     back.hidden = false;
   }
 
-  /* ---------------- new page / new post dialog ---------------- */
-
   function openNewDocDialog(mode) {
     const dialog = $('#newpage-dialog');
     const input = $('#newpage-name');
@@ -2116,8 +2701,12 @@
     });
   }
 
-  function wireAdvanced() {
+  function wireMoreMenu() {
+    const menu = $('#more-menu');
+    $('#btn-more').addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+    document.addEventListener('click', (e) => { if (!e.target.closest('#more-menu') && !e.target.closest('#btn-more')) menu.hidden = true; });
     $('#btn-download').addEventListener('click', () => {
+      menu.hidden = true;
       const files = buildFiles();
       const kind = currentKind();
       const file = kind === 'page' || kind === 'post' ? store.current : `${kind}.html`;
@@ -2130,6 +2719,7 @@
     });
     $('#btn-reset-demo').hidden = !service.isDemo;
     $('#btn-reset-demo').addEventListener('click', () => {
+      menu.hidden = true;
       if (!window.confirm('Reset the demo? This throws away everything you changed in this demo.')) return;
       service.resetDemo();
       try { localStorage.removeItem(draftKey()); localStorage.removeItem(lastDocKey()); } catch { /* ignore */ }
@@ -2139,13 +2729,13 @@
 
   function wireUi() {
     wireToolbar();
-    wireDrawer();
+    wireLibrary();
     wireSidebar();
     wireSettings();
     wirePreview();
     wireMediaLibrary();
     wireNewDocDialog();
-    wireAdvanced();
+    wireMoreMenu();
 
     $('#btn-save').addEventListener('click', saveDraft);
     $('#btn-publish').addEventListener('click', publishLive);
@@ -2153,41 +2743,39 @@
       d.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => d.close()));
     });
 
-    $('#page-title').addEventListener('input', (e) => {
-      const meta = docMeta(store.current);
-      if (!meta) return;
-      meta.title = e.target.value.trim() || F.nameFromFile(store.current);
-      refreshLiveBlocks();
-      renderRegionPreviews();
-      markDirty();
-    });
-    $('#page-title').addEventListener('change', renderSidebar);
-
-    // Selecting a box: click anywhere on it. Clicking the empty page: nothing selected.
-    canvasEl().addEventListener('mousedown', (e) => {
+    // Selection: a block (click on it), a section (click its empty area or bar), or nothing.
+    const canvas = canvasEl();
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.ed-gap')) return;
       const item = e.target.closest('.grid-stack-item');
-      if (item) selectBlock(item);
+      if (item) { selectBlock(item); return; }
+      const action = e.target.closest('[data-section-action]');
+      const sec = e.target.closest('.ed-section');
+      if (sec && !action && !e.target.closest('[data-add-block]')) selectSection(sec.dataset.section);
     }, true);
-    canvasEl().addEventListener('focusin', (e) => {
+    canvas.addEventListener('focusin', (e) => {
       const item = e.target.closest('.grid-stack-item');
       if (item) selectBlock(item);
     });
-    $('#paper').addEventListener('mousedown', (e) => {
-      if (!e.target.closest('.grid-stack-item') && !e.target.closest('.region-preview')) selectBlock(null);
-    });
-    canvasEl().addEventListener('click', (e) => {
+    canvas.addEventListener('click', (e) => {
       const del = e.target.closest('.block-delete');
-      if (del) removeBlock(del.closest('.grid-stack-item'));
+      if (del) { removeBlock(del.closest('.grid-stack-item')); return; }
+      const act = e.target.closest('[data-section-action]');
+      if (act) sectionAction(act.closest('.ed-section').dataset.section, act.dataset.sectionAction);
     });
-    canvasEl().addEventListener('input', markDirty);
+    canvas.addEventListener('input', markDirty);
+    $('#paper').addEventListener('mousedown', (e) => {
+      if (!e.target.closest('#canvas') && !e.target.closest('.region-preview')) { selectBlock(null); selectSection(null); }
+    });
 
     $('#preview-header').addEventListener('click', () => openDoc('header.html'));
     $('#preview-footer').addEventListener('click', () => openDoc('footer.html'));
 
-    grid.on('change added removed', () => { markDirty(); refreshEmptyState(); });
-    const paper = $('#paper');
-    grid.on('dragstart resizestart', () => { paper.classList.add('is-arranging'); hideToolbar(); });
-    grid.on('dragstop resizestop', () => paper.classList.remove('is-arranging'));
+    // Lucide: turn any new icon placeholders into SVGs.
+    new MutationObserver((records) => {
+      if (records.some((r) => Array.from(r.addedNodes).some((n) => n.nodeType === 1 && (n.matches('[data-lucide]') || n.querySelector('[data-lucide]'))))) renderIcons();
+    }).observe(document.body, { childList: true, subtree: true });
+    renderIcons();
 
     window.addEventListener('beforeunload', () => { if (saveTimer) flushSave(); });
   }
@@ -2219,24 +2807,20 @@
     store.remote = new Map(files.map((f) => [f.path, { content: f.content, sha: f.sha }]));
   }
 
-  async function boot() {
-    grid = GridStack.init({
-      column: F.COLUMNS,
-      cellHeight: CONFIG.cellHeight,
-      margin: F.DEFAULT_THEME.blockSpacing / 2,
-      float: true,
-      minRow: CONFIG.minRows.page,
-      handle: '.block-handle',
-      acceptWidgets: '.add-tile',
-      resizable: { handles: 'se' },
-      animate: true,
-      columnOpts: { breakpoints: [] },
-    }, canvasEl());
+  /** Local copies made by an older Pebble kept pages as {blocks}: give them rows. */
+  function upgradeDocs(docs) {
+    for (const d of Object.values(docs)) {
+      if ((d.kind === 'page' || d.kind === 'post') && !d.rows) { d.rows = F.rowsFromBlocks(d.blocks || []); delete d.blocks; }
+    }
+    return docs;
+  }
 
+  async function boot() {
     service = createService();
     if (!service) { location.replace(PebbleAuth.appRoot); return; }
     wireUi();
     $('#btn-back').href = dashboardUrl();
+    $('#more-back').href = dashboardUrl();
     showLoading('Opening your website…');
 
     try {
@@ -2278,7 +2862,7 @@
         site.customCss = local.customCss || '';
       }
       store.config = site.config;
-      store.docs = site.docs;
+      store.docs = upgradeDocs(site.docs);
       store.customCss = site.customCss;
       for (const f of ['header.html', 'footer.html']) {
         if (!store.docs[f]) store.docs[f] = { kind: f.slice(0, -5), blocks: f === 'header.html' ? F.defaultHeaderBlocks() : F.defaultFooterBlocks(store.config.siteName) };
@@ -2292,10 +2876,10 @@
       openDoc(start);
       flushSave();
       if (store.upgraded) {
-        showToast('Pebble has new features! Your website was updated to use them — press “Publish live” once to put it online.');
-      } else if (!hadLocal && lastPending.length && lastPending.every((p) => ['global.css', 'site-config.json'].includes(p.path))) {
-        // Only Pebble's own files differ: this website was made by an earlier Pebble.
-        showToast('Pebble has new design options (text styles, fonts). Press “Publish live” once to update your website.');
+        showToast('Pebble has new features! Your website was updated to use them — press “Publish” once to put it online.');
+      } else if (!hadLocal && lastPending.length && store.remote.has('site-config.json')) {
+        // Only Pebble's own way of writing files changed: this site was made by an earlier Pebble.
+        showToast('Pebble has been updated (sections, a menu button for phones, logo and more). Press “Publish” once to update your website.');
       }
     } catch (err) {
       console.error('Pebble: could not open the website', err);
@@ -2319,11 +2903,11 @@
       docs['footer.html'] = { kind: 'footer', blocks: footer ? F.partialFromHtml(footer.content, 'footer') : F.defaultFooterBlocks(config.siteName) };
       for (const p of config.pages) {
         const f = store.remote.get(p.file);
-        docs[p.file] = { kind: 'page', blocks: f && F.isPebblePage(f.content) ? F.parsePage(f.content, p.file).blocks : [] };
+        docs[p.file] = { kind: 'page', rows: f && F.isPebblePage(f.content) ? F.parsePage(f.content, p.file).rows : F.rowsFromBlocks([]) };
       }
       for (const p of config.posts) {
         const f = store.remote.get(p.file);
-        docs[p.file] = { kind: 'post', blocks: f && F.isPebblePage(f.content) ? F.parsePage(f.content, p.file).blocks : [] };
+        docs[p.file] = { kind: 'post', rows: f && F.isPebblePage(f.content) ? F.parsePage(f.content, p.file).rows : F.rowsFromBlocks([]) };
       }
       const theme = store.remote.get('theme.css');
       return { config, docs, customCss: config.customCss && theme ? theme.content : '' };
@@ -2341,23 +2925,23 @@
     get store() { return store; },
     get service() { return service; },
     get selected() { return selected; },
+    get selectedSection() { return selectedSection; },
+    grids,
     buildFiles,
     pendingChanges,
     openDoc,
     createPage,
     createPost,
+    renameDoc,
     movePage,
     selectBlock,
+    selectSection,
+    addRow,
+    setRowLayout,
     saveDraft,
     publishLive,
     readCanvas,
     serializeToStaticHTML() { const files = buildFiles(); return files[store.current] || files[`${currentKind()}.html`]; },
-    deserializeToEditor(html) {
-      const blocks = F.parsePage(html, store.current).blocks;
-      loadCanvas(blocks, currentKind());
-      flushSave();
-      return blocks;
-    },
     EDITORS,
     CONFIG,
   };

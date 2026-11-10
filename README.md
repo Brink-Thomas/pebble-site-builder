@@ -26,8 +26,9 @@ lib/                     ← shared by the start page and the editor
   github-service.js      ← GitHubClient / GitHubAccount / GitHubService (+ practice-mode mocks)
 editor/                  ← THE EDITOR (opened as editor/?site=owner/repo)
   index.html  editor.css
-  engine.js              ← block editors, Gridstack canvas, pages/posts/header/footer,
-                           Add drawer, Site Settings, save draft / publish live, photos
+  engine.js              ← block editors, sections (one Gridstack per section),
+                           hover "+" library, sidebar, Inspector, Site Settings,
+                           save draft / publish live, photos
 worker/                  ← SERVERLESS TOKEN EXCHANGE (Cloudflare Worker)
 example-site/            ← WHAT A USER'S REPOSITORY CONTAINS (see "The website format")
 ```
@@ -103,29 +104,30 @@ comes from one question: *would she understand this without being told?*
 
 | Principle | How it shows up |
 |---|---|
-| **Use everyday words** | "Box", "Photo", "Page", "Website", "Save draft", "Publish live", "hosting account". The UI never says *branch*, *commit*, *merge*, *main*, *dev*, *repository*, *token* or *deploy*. |
+| **Use everyday words** | "Block", "Section", "Photo", "Page", "Website", "Save draft", "Publish", "hosting account". The UI never says *branch*, *commit*, *merge*, *main*, *dev*, *repository*, *token* or *deploy*. |
 | **GitHub is just "her hosting"** | One big button: **Connect your Hosting Account (GitHub)**, with a sentence explaining that GitHub keeps her website online for free and that she can make an account in the next step. Under it, a reassurance: Pebble only changes a website when she opens it and presses Save or Publish. |
-| **Add things with one big button** | **＋ Add** opens a drawer of boxes with big icons and one-line descriptions — Text, Photo, Card, Button, Blog posts — that she drags straight onto the page (or clicks). A newly added box is selected straight away, so its settings are already showing in the Inspector on the right. |
-| **The sidebar is her website** | **Main Menu** lists the pages that have a link in the site's menu, in menu order. **Other Pages** lists pages that are online but not in the menu. She drags a page between the two lists, or within the Main Menu to reorder it; a small ↓/↑ button does the same without dragging. **On every page** holds the **Header** and **Footer**, named as such. |
-| **Blog posts don't clutter** | Posts nest under the **Blog** page and stay hidden until she clicks “▸ 3 blog posts”. **＋ Write a blog post** sits inside that list. Her first post creates the Blog page; a site without a blog shows **📰 Start a blog**. |
-| **A toolbar only when she's writing** | Clicking into text shows a floating toolbar right above that box (pinned under the top bar when there's no room). It has a style dropdown (Main Heading, Heading, Subheading, Paragraph, Small text — names she can change), **B**, *I*, U, 🖍️ highlight (five soft colors), alignment (left, center, right, justify), list and link. It disappears when she leaves the text. |
-| **Click a box, see its settings** | The right-hand **Inspector** shows the clicked box's settings and redraws the canvas as she changes them. Photo: replace, description (alt text), link, own roundness. Card: background color, text color, border. Button: text, destination (her pages and posts), main color / second color / outline. With nothing selected it shows the page's settings, a blog post's date, cover and summary, or the Header's hero image. |
-| **A big hero photo** | Header → 🌄 Hero image: pick a photo, then choose "Behind the website name and menu" or "Below the menu, as a wide banner", and Small/Medium/Large. |
-| **Design in her words** | **🎨 Site Settings**: main and second color; **Letters**, with ten popular fonts and a "Use a custom font" box that takes a font name or a link from fonts.google.com; **Text styles** (name, size, line spacing, boldness for each); **Roundness** (Square ↔ Round); **Spacing** (Snug ↔ Airy). Everything updates live. |
-| **Pick a website, not a project** | After connecting: "Hello, Jane! 👋 Which website would you like to work on?" and a grid of big cards, each with a colourful tile, the website's own name (read from its header, e.g. "My Garden Diary"), its web address and "Updated 3 days ago". Websites made another way sit in a collapsed "Other websites" section, clearly marked as left alone. |
+| **Add things where she is looking** | No "Add" button in the top bar. Hovering between two parts of the page shows a blue line with a **+**; it opens a small library with **Sections** (one section, two equal, wide + narrow, narrow + wide, three) and **Blocks** (Text, Photo, Card, Button, Blog posts…). Each section also shows **+ Add a block** when she hovers it. Tiles can be clicked or dragged straight onto any section. A new block is selected straight away, so its settings are already showing in the Inspector. |
+| **The sidebar is her website** | **Main Menu** lists the pages that have a link in the site's menu, in menu order. **Other Pages** lists pages that are online but not in the menu. She drags a page between the two lists, or within the Main Menu to reorder it; a small arrow button does the same without dragging. She renames a page right there: double-click the name, or the pencil. **On every page** holds the **Header** and **Footer**. |
+| **Blog posts get their own panel** | Clicking **Blog** slides the whole sidebar over to a Blog panel: a big **< Back to Pages** button on top, the Blog page itself, **Write a new post**, and the posts, newest first (renamable the same way). Her first post creates the Blog page; a site without a blog shows **Start a blog**. |
+| **A toolbar only when she's writing** | Clicking into text shows a floating toolbar right above that box (pinned under the top bar when there's no room). It has a style dropdown (Main Heading, Heading, Subheading, Paragraph, Small text — names she can change) and icon buttons: bold, italic, underline, highlight (five soft colors), align left / center / right / justify, list and link. It disappears when she leaves the text. |
+| **Click it, see its settings** | The right-hand **Inspector** shows the settings of what she clicked and redraws the canvas as she changes them. Photo: replace, description (alt text), link, own roundness. Card: background color, text color, border. Button: text, destination, look. **Section:** the row's layout (side by side), background color, background photo, a color over the photo with its strength in %, and light or dark text. With nothing selected it shows the page's settings, a blog post's date, cover and summary, or the Header's hero image. |
+| **A big hero photo** | Header → Hero image: pick a photo, then choose "Behind the website name and menu" or "Below the menu, as a wide banner", and Small/Medium/Large. |
+| **Design in her words** | **Site Settings**: website name; **Branding** (a logo for the Header, with "Logo and website name" or "Logo only" and a size slider, and a favicon for the browser tab); main and second color; **Website font**, with fourteen fonts listed by their real names and a "Use a custom font" box for fonts.google.com; **Text styles** (name, font, size, line spacing, boldness for each); **Roundness** and **Spacing**, each showing its exact value in px. Everything updates live. |
+| **Pick a website, not a project** | After connecting: "Hello, Jane! Which website would you like to work on?" and a grid of big cards, each with a colourful tile, the website's own name (read from its header, e.g. "My Garden Diary"), its web address and "Updated 3 days ago". Websites made another way sit in a collapsed "Other websites" section, clearly marked as left alone. |
 | **Calm failures** | Cancelling on GitHub: "No problem — your hosting account was not connected." An expired or revoked connection: "For your safety, please connect your hosting account again." Never an error code. |
 | **Try before connecting** | A practice website she can play with freely, with a banner saying nothing goes online. |
-| **Two clear buttons** | **💾 Save draft** keeps her work safe online, where only she can see it. **🚀 Publish live** puts everything on the website for everyone. Publish live also saves first, so she never needs both, and every change made since the last publish goes live together: pages, new pages, photos, and the menu on every page. |
-| **Nothing gets lost** | Every edit is also kept in her browser straight away, so closing the tab loses nothing. One plain status line says where things stand: "● Changes not saved yet", "✓ Draft saved · not live yet" or "✓ Your website is up to date". |
-| **Photos she can find again** | Clicking a photo box opens **Choose a photo**: a big "Add a new photo from your computer" area (or drag one in), and below it every photo she has uploaded, as large thumbnails. One click uses it. The photo in use is marked "✓ In use here". |
+| **Two clear buttons** | **Save draft** keeps her work safe online, where only she can see it. **Publish** puts everything on the website for everyone. Publish also saves first, so she never needs both, and every change made since the last publish goes live together: pages, new pages, photos, and the menu on every page. |
+| **Nothing gets lost** | Every edit is also kept in her browser straight away, so closing the tab loses nothing. One status line with a colored square says where things stand: "Changes not saved yet", "Draft saved · not live yet" or "Your website is up to date". |
+| **Photos she can find again** | Clicking a photo box opens **Choose a photo**: a big "Add a new photo from your computer" area (or drag one in), and below it every photo she has uploaded, as large thumbnails. One click uses it. The photo in use is marked "In use here". The logo and favicon are chosen from the same library. |
 | **Forgiving when something clashes** | If the live site was changed somewhere else, she gets a plain question ("Publish my version" / "Not now") instead of an error. Being offline or losing access gets a sentence that says her changes are kept. |
-| **Pages are a simple list** | "Your pages" in the sidebar: 🏠 Home, 📄 About me… A **New** badge marks a page that isn't on the live website yet, and an orange dot marks changes that aren't saved yet. **＋ Add a new page** asks only for a name and shows the web address it will get. |
-| **What you see is what visitors get** | The page sits between the site's real header and footer, uses the site's own `global.css` and `theme.css`, and is exactly as wide as the live page. The block layout is pixel-identical. **👀 Preview** shows the real exported HTML at computer or phone size, and its menu links work. |
-| **Things stay where she puts them** | Free-form layout: a box dropped low on the page stays there, with empty space above it. Faint row lines show it's a canvas, and the full grid appears while she drags. |
-| **Tools appear where she is looking** | "✥ Move", "🗑 Remove" and the resize corner show only on the box under her mouse. The text style bar lights up once she clicks into text. |
+| **Pages are a simple list** | A **New** badge marks a page that isn't on the live website yet, and an orange square marks changes that aren't saved yet. The **+** next to "Main Menu" asks only for a name and shows the web address it will get. |
+| **What you see is what visitors get** | The page sits between the site's real header and footer, uses the site's own `global.css` and `theme.css`, and is exactly as wide as the live page. The block layout is pixel-identical. **Preview** shows the real exported HTML at computer or phone size (with the phone menu button), and its menu links work. |
+| **Things stay where she puts them** | Free-form layout: a block dropped low in a section stays there, with empty space above it. Faint row lines show it's a canvas, and the full grid appears while she drags. |
+| **Tools appear where she is looking** | A block's "Move" handle, remove button and resize corner show only on the block under her mouse; a section's bar (settings, put a section next to it, move up/down, remove) only on the section under her mouse. |
 | **Two ways to do everything** | Drag a tile onto the page or just click it. Pick a photo from the library or drop a photo file onto the box. Switch pages from the sidebar or from the menu on the page. |
-| **Mistakes are cheap** | Removing a box shows "Box removed. **Undo**", and the box comes back in exactly the same spot. |
-| **Hide the plumbing** | Technical names, file downloads and the demo reset are tucked under "More options". |
+| **Mistakes are cheap** | Removing a block or a section shows "… removed. **Undo**", and it comes back exactly as it was. Changing a row from three sections to one never loses blocks: they move into the section that stays. |
+| **One calm look** | Square corners, 1px lines, one icon set ([Lucide](https://lucide.dev), loaded from jsDelivr) and no emoji. Top-bar buttons show an icon and a word; on smaller screens the words hide (the tooltip stays) and on phones the bar shrinks to icons, so it never overflows. |
+| **Hide the plumbing** | Technical names, file downloads and the demo reset are tucked under the "…" menu. |
 
 ## 2. Architecture
 
@@ -200,7 +202,8 @@ A Pebble website, as files in the user's repository:
 ```
 site-config.json     site name · pages (order + showInNavbar = Main Menu / Other Pages)
                      · blogPage · blog posts (title, date, thumbnail, excerpt)
-                     · header.hero · theme · typography (text styles, custom font)
+                     · header.hero · branding (logo, logo size/mode, favicon)
+                     · theme · typography (text styles + a font each, custom font)
                      · customCss flag
 global.css           :root { --primary-color … } + Pebble's base styles
 theme.css            optional extra CSS from a helper (loaded after global.css)
@@ -212,7 +215,8 @@ assets/images/*      photos
 ```
 
 **Client-side static generation.** The editor keeps the website as plain data
-(config, a list of blocks per page/post/partial, custom CSS). When she saves,
+(config, rows of sections for each page and post, a list of blocks for each
+partial, custom CSS). When she saves,
 `PebbleFormat.buildSiteFiles()` renders **every** file from that data:
 `site-config.json`, `global.css`, `theme.css`, both partials, and each page
 and post wrapped in the header and footer. It then commits **only the files
@@ -223,6 +227,49 @@ whose text changed**. That single rule makes everything consistent:
 - publishing a new post updates every page with a Blog posts box;
 - untouched files produce no commit.
 
+**Sections.** A page or post is a list of **rows**; a row holds 1–3
+**sections** side by side, and each section has its own 12-column grid of
+blocks:
+
+```js
+rows: [{ sections: [
+  { width: 70, style: { bgColor, bgImage, overlayColor, overlayOpacity, tone }, blocks: [...] },
+  { width: 30, style: {...}, blocks: [...] },
+] }]
+```
+
+Layouts: one (100), two equal (50/50), wide + narrow (70/30), narrow + wide
+(30/70), three (33/34/33). Published as:
+
+```html
+<main class="site-main" data-pebble-page>
+  <div class="section-row section-row--split" data-pebble-row style="--row-columns:70fr 30fr">
+    <section class="page-section page-section--filled" data-pebble-section data-width="70"
+             data-bg-color="#efe7db" style="--section-bg:#efe7db">
+      <div class="page-section__bg"><img …></div>            <!-- background photo -->
+      <div class="page-section__overlay" style="background:#000;opacity:.3"></div>
+      <div class="region-grid section-grid" data-pebble-grid data-columns="12">…blocks…</div>
+    </section>
+    …
+```
+
+A one-section row (`section-row--full`) runs its background edge to edge with
+the content centred; split rows sit inside the page width. On phones the
+sections stack. `page-section--light` switches to white text for dark
+backgrounds. Pages from before sections (one grid in `<main>`) are read as a
+single full-width section.
+
+**Branding.** `config.branding` = `{ logo, logoHeight (16–140 px), logoMode: logo|logo-name, favicon }`.
+The logo is rendered inside the Website name block (`a.site-title` →
+`img.site-title__logo` + `span.site-title__name`); the favicon becomes
+`<link rel="icon">` in every page's `<head>`. Both are ordinary photos in
+`assets/images/`.
+
+**Phone menu.** The Site menu block renders a CSS-only hamburger (a hidden
+checkbox, its `<label>` with three bars, then the `<ul>`), so it works without
+JavaScript. Below 700px the menu folds behind the button and drops down as a
+full-width panel; footer menus stay a plain list of links.
+
 **Hero image.** `config.header.hero` = `{ enabled, src, position: behind|below, size: small|medium|large }`.
 It is rendered into the header region as an `<img>`: behind the grid
 (`.site-header--hero` with a dark gradient for legibility) or as a banner below
@@ -230,8 +277,8 @@ it (`.site-hero`).
 
 **The stitching** (`stitchPage`). Each page gets `<head>` (title, description
 for posts, `global.css`, plus `theme.css` if present), the header region, an
-automatic post header for blog posts (date, title, cover photo), the page grid
-and the footer region. Paths are stored relative to the site root
+automatic post header for blog posts (date, title, cover photo), the rows of
+sections and the footer region. A favicon, when set, is linked in the `<head>`. Paths are stored relative to the site root
 (`about.html`, `assets/images/x.jpg`, `blog/my-post.html`) and are given a
 `../` prefix when rendered into a page inside `blog/`. The prefix is removed
 again when the page is read back.
@@ -255,8 +302,8 @@ Pebble tells her: "press Publish live once to put it online".
 | Card | `article.editor-block.block-card(--outline/--shadow/--none)` (+ `data-bg`, `data-text-color`, `data-border`, `--card-bg`, `--card-text`) → `__media`, `__title`, `__text`, `__link` | photo + title + text + optional link; colors; border |
 | Button | `div.editor-block.block-button--{left,center,right}` → `a.block-button__link--{primary,accent,secondary}` | main color / second color / outline; links to a page, a post or another website |
 | Blog posts | `section.editor-block.block-blog-feed` → `.blog-feed` of `a.blog-card` | generated from `site-config.json` when stitched: newest first, 3/6/12/all |
-| Website name | `div.editor-block.block-site-title` → `a.site-title` | header/footer only; from `siteName` |
-| Site menu | `nav.editor-block.block-menu` → `ul.site-menu` | header/footer only; pages with `showInNavbar` |
+| Website name | `div.editor-block.block-site-title` → `a.site-title` → optional `img.site-title__logo`, `span.site-title__name` | header/footer only; from `siteName` and `branding` |
+| Site menu | `nav.editor-block.block-menu` → `input.site-menu__toggle` + `label.site-menu__burger` + `ul.site-menu` | header/footer only; pages with `showInNavbar`; hamburger on phones |
 | Embed code | `div.editor-block.block-embed` | raw HTML for helpers (see below) |
 
 Every block also carries `data-widget-type` and `data-gs-x/y/w/h` (what Pebble
@@ -271,22 +318,26 @@ The exported site depends on five variables, set in Site Settings:
   --primary-color: #b85c38;   /* "Main color"  – buttons, links, current menu item */
   --secondary-color: #6b8b4f; /* "Second color" – dates, card edges, quotes */
   --border-radius: 14px;      /* "Roundness" */
-  --font-family: Georgia, …;  /* "Letters" – one of six safe font stacks */
+  --font-family: Georgia, …;  /* "Website font" */
   --block-spacing: 16px;      /* "Spacing" – the gap between boxes */
 }
 ```
 
-Each text style adds three more variables, used by `.rich-text h1/h2/h3/p` and `.text-small`:
+Each text style adds four more variables, used by `.rich-text h1/h2/h3/p` and `.text-small`:
 
 ```css
+  --text-title-font: Montserrat, …;   /* or var(--font-family) for "Website font" */
   --text-title-size: 48px;   --text-title-line-height: 1.15;   --text-title-weight: 700;   /* <h1> "Main Heading" */
   --text-heading-…           /* <h2> */      --text-subheading-…   /* <h3> */
   --text-paragraph-…         /* <p>  */      --text-small-…        /* <p class="text-small"> */
 ```
 
-**Fonts.** Ten choices: Georgia and the system font, plus eight Google Fonts
+**Fonts.** Fourteen choices, listed by their real names: Georgia, System Sans,
+Palatino, Trebuchet MS, System Rounded, Courier New, plus eight Google Fonts
 (Playfair Display, Merriweather, Lora, Roboto, Open Sans, Lato, Montserrat,
-Nunito). A Google Font adds `@import url("https://fonts.googleapis.com/…")` as
+Nunito). Each text style can use its own font or follow the website font.
+Every Google Font in use (website font, per-style fonts, custom font) goes into
+one `@import url("https://fonts.googleapis.com/css2?family=A&family=B…")` as
 the first line of `global.css`.
 
 **The custom font escape hatch** (`PebbleFormat.parseCustomFont`) accepts a
@@ -387,7 +438,13 @@ store = {
   older site). Then put back changes kept in this browser and reopen the last
   doc.
 - **Editing:** one doc at a time on the canvas: a page, a post, or the
-  header/footer. Switching docs copies the canvas into `docs`. Every change
+  header/footer. A page or post is drawn as rows of sections, and **every
+  section is its own Gridstack instance** (`grids`: section id → GridStack);
+  the Header and Footer are a single grid. `acceptWidgets` lets a block be
+  dragged from one section into another, and library tiles onto any section.
+  Structural changes (add a row, change its layout, move it, remove a
+  section) edit `doc.rows` and redraw the canvas. Switching docs copies the
+  canvas into `docs`. Every change
   is kept in `localStorage` as data, and the sidebar dots come from comparing
   the rendered files with `remote`.
 - **Floating toolbar:** it shows when a `.text-editor` gets focus or the text
@@ -398,7 +455,8 @@ store = {
   on a `span` or directly on `b`/`u`/`i`/`a`, to the nearest of five
   `mark.hl-*` classes.
 - **Inspector:** each block type lists its fields (`text`, `select`, `link`,
-  `color`, `radius`, `photo`, `code`, `date`, `toggle`). A change updates the
+  `color`, `radius`, `range`, `photo`, `code`, `date`, `toggle`). Sections use
+  the same fields, plus layout tiles. A change updates the
   block's data and redraws it on the canvas at once. The published HTML
   carries the same values as `data-` attributes.
 - **Save draft:** commit every changed file to `dev`. **Publish live:** save,
@@ -429,8 +487,8 @@ store = {
 
 Add it in two places: its published HTML in `PebbleFormat.BLOCKS`
 (`render`, `parse`, `defaults`) and its editing UI in `EDITORS`
-(`create`, `read`, and `inspector` fields for the right-hand panel). The Add
-drawer, saving, stitching and round-tripping work without further changes.
+(`create`, `read`, and `inspector` fields for the right-hand panel). The
+library, saving, stitching and round-tripping work without further changes.
 
 ### Safety
 
@@ -460,8 +518,9 @@ drawer, saving, stitching and round-tripping work without further changes.
 
 ```js
 Pebble.serializeToStaticHTML()       // the open page → HTML
-Pebble.deserializeToEditor(html)     // HTML → the open page
-Pebble.readCanvas()                  // the open page's blocks as plain data
+Pebble.readCanvas()                  // the open doc as plain data: { rows } or { blocks }
+Pebble.addRow(index, 'main')         // add a row of sections (one, half, main, side, three)
+Pebble.setRowLayout(rowIndex, 'half')
 Pebble.buildFiles()                  // every file of the website, rendered from data
 Pebble.pendingChanges()              // the files Save draft would write
 Pebble.store                         // config, docs, remote files
@@ -472,6 +531,11 @@ await Pebble.service.listCommits('main')   // demo only: history of the fake rep
 ## Versions
 
 - `main`: the current version, deployed by GitHub Pages.
+- `v3-stable`: the version before sections, the hover "+" library, the
+  sliding blog panel, branding (logo, favicon), the phone menu button,
+  per-style fonts and the Lucide redesign. Its websites open in the current
+  version; their pages are rewritten once with sections markup, and Pebble asks
+  her to press Publish once.
 - `v2-stable`: the version before the sidebar menus, floating text toolbar,
   Inspector, hero image and typography settings. Its websites open in the
   current version unchanged; Pebble only rewrites `global.css` and
@@ -490,8 +554,8 @@ await Pebble.service.listCommits('main')   // demo only: history of the fake rep
   everywhere" option could revoke the grant through the worker.
 - **One commit per save:** the Git Data API (blobs → tree → commit → update
   ref) would save several pages as one atomic commit.
-- **Photo and page management:** delete or rename photos; delete, rename
-  and reorder pages.
+- **Photo and page management:** delete or rename photos; delete pages and
+  posts.
 - Undo/redo history, more block types, and theme presets.
 
 Built with [Gridstack.js](https://gridstackjs.com/) 10.3.1 (MIT).

@@ -128,7 +128,7 @@
     show('sites');
     const isDemo = account.isDemo;
     $('#practice-banner').hidden = !isDemo;
-    $('#hello').textContent = isDemo ? 'Welcome! 👋' : `Hello, ${String(person.name).split(' ')[0]}! 👋`;
+    $('#hello').textContent = isDemo ? 'Welcome!' : `Hello, ${String(person.name).split(' ')[0]}!`;
 
     if (!isDemo) {
       $('#account').hidden = false;
@@ -189,7 +189,7 @@
     btn.type = 'button';
     btn.className = 'site-card site-card--new';
     btn.dataset.create = '';
-    btn.innerHTML = '<span class="site-card--new__plus" aria-hidden="true">＋</span><span>Create a new website</span>';
+    btn.innerHTML = '<span class="site-card--new__plus" aria-hidden="true">+</span><span>Create a new website</span>';
     return btn;
   }
 

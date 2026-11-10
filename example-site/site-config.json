@@ -51,6 +51,12 @@
       "size": "medium"
     }
   },
+  "branding": {
+    "logo": "",
+    "logoHeight": 44,
+    "logoMode": "logo-name",
+    "favicon": ""
+  },
   "theme": {
     "primaryColor": "#b85c38",
     "secondaryColor": "#6b8b4f",
@@ -62,30 +68,35 @@
     "styles": {
       "title": {
         "name": "Main Heading",
+        "font": "",
         "size": 48,
         "lineHeight": 1.15,
         "weight": 700
       },
       "heading": {
         "name": "Heading",
+        "font": "",
         "size": 36,
         "lineHeight": 1.2,
         "weight": 600
       },
       "subheading": {
         "name": "Subheading",
+        "font": "",
         "size": 24,
         "lineHeight": 1.3,
         "weight": 600
       },
       "paragraph": {
         "name": "Paragraph",
+        "font": "",
         "size": 18,
         "lineHeight": 1.65,
         "weight": 400
       },
       "small": {
         "name": "Small text",
+        "font": "",
         "size": 14,
         "lineHeight": 1.5,
         "weight": 400

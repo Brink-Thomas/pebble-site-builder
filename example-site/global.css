@@ -6,18 +6,23 @@
   --border-radius: 14px;
   --font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
   --block-spacing: 16px;
+  --text-title-font: var(--font-family);
   --text-title-size: 48px;
   --text-title-line-height: 1.15;
   --text-title-weight: 700;
+  --text-heading-font: var(--font-family);
   --text-heading-size: 36px;
   --text-heading-line-height: 1.2;
   --text-heading-weight: 600;
+  --text-subheading-font: var(--font-family);
   --text-subheading-size: 24px;
   --text-subheading-line-height: 1.3;
   --text-subheading-weight: 600;
+  --text-paragraph-font: var(--font-family);
   --text-paragraph-size: 18px;
   --text-paragraph-line-height: 1.65;
   --text-paragraph-weight: 400;
+  --text-small-font: var(--font-family);
   --text-small-size: 14px;
   --text-small-line-height: 1.5;
   --text-small-weight: 400;
@@ -39,10 +44,12 @@
      .block-blog-feed  .block-embed  .block-site-title  .block-menu
      .site-header(--hero)  .site-hero  .site-footer  .site-main  .post-header  .region-grid
      .rich-text h1/h2/h3/p/.text-small  .align-*  mark.hl-*
+     .section-row(--full|--split)  .page-section(--filled|--light)  .page-section__bg  .page-section__overlay
+     .site-title__logo  .site-title__name  .site-menu__burger
 
    Design variables (from Site Settings): --primary-color --secondary-color
    --border-radius --font-family --block-spacing, and per text style
-   --text-{title|heading|subheading|paragraph|small}-{size|line-height|weight}.
+   --text-{title|heading|subheading|paragraph|small}-{font|size|line-height|weight}.
    ========================================================================== */
 
 :root {
@@ -93,7 +100,30 @@ img { max-width: 100%; }
 /* ---------- Header, main, footer ---------- */
 
 .site-header { padding: 22px 0; border-bottom: 1px solid var(--line-color); }
-.site-main { padding: 40px 0 72px; }
+.site-main { padding: 0 0 48px; }
+
+/* ---------- Sections: rows of 1–3 sections, each with its own grid ----------
+   One section in a row: its background runs edge to edge, content stays
+   centred. Two or three: they sit side by side (--row-columns: 70fr 30fr). */
+.section-row { display: grid; grid-template-columns: var(--row-columns, 1fr); gap: var(--block-spacing); }
+.section-row--split { max-width: var(--page-width); margin: 0 auto; padding: calc(var(--block-spacing) * 1.5) calc(var(--block-spacing) + 8px); }
+.page-section { position: relative; min-width: 0; background: var(--section-bg, transparent); }
+.section-row--full .page-section { padding: calc(var(--block-spacing) * 2.5) 0; }
+.section-row--split .page-section { padding: 0; }
+.section-row--split .page-section--filled { padding: calc(var(--block-spacing) * 1.5) 0; border-radius: var(--border-radius); overflow: hidden; }
+.section-row--split .page-section .section-grid { padding: 0 var(--block-spacing); }
+.section-row--split .page-section:not(.page-section--filled) .section-grid { padding: 0; }
+.page-section__bg { position: absolute; inset: 0; z-index: 0; }
+.page-section__bg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.page-section__overlay { position: absolute; inset: 0; z-index: 0; }
+.page-section .section-grid { position: relative; z-index: 1; }
+/* "Light text" sections (for dark backgrounds) */
+.page-section--light { color: #fff; }
+.page-section--light .rich-text, .page-section--light .rich-text h1, .page-section--light .rich-text h2,
+.page-section--light .rich-text h3, .page-section--light .block-image__caption { color: #fff; }
+.page-section--light .rich-text a { color: #fff; }
+.page-section--light .block-button__link--secondary { color: #fff; border-color: rgba(255, 255, 255, .85); }
+.page-section--light .block-button__link--secondary:hover { background: rgba(255, 255, 255, .15); }
 .site-footer { padding: 28px 0 36px; border-top: 1px solid var(--line-color); color: var(--muted-color); font-size: 0.95rem; }
 .site-header .region-grid,
 .site-footer .region-grid { grid-auto-rows: minmax(calc(var(--row-height) - var(--block-spacing) - 16px), auto); }
@@ -101,6 +131,7 @@ img { max-width: 100%; }
 /* ---------- Rich text (text blocks, card text) ---------- */
 
 .rich-text {
+  font-family: var(--text-paragraph-font, var(--font-family));
   font-size: var(--text-paragraph-size, 18px);
   line-height: var(--text-paragraph-line-height, 1.65);
   font-weight: var(--text-paragraph-weight, 400);
@@ -115,10 +146,10 @@ img { max-width: 100%; }
 
 /* The five text styles (Site Settings → Text styles):
    Main Heading = h1, Heading = h2, Subheading = h3, Paragraph = p, Small text = p.text-small */
-.rich-text h1 { font-size: var(--text-title-size); line-height: var(--text-title-line-height); font-weight: var(--text-title-weight); margin: 0.1em 0 0.35em; }
-.rich-text h2 { font-size: var(--text-heading-size); line-height: var(--text-heading-line-height); font-weight: var(--text-heading-weight); margin: 0.2em 0 0.35em; }
-.rich-text h3 { font-size: var(--text-subheading-size); line-height: var(--text-subheading-line-height); font-weight: var(--text-subheading-weight); margin: 0.6em 0 0.35em; }
-.rich-text .text-small { font-size: var(--text-small-size); line-height: var(--text-small-line-height); font-weight: var(--text-small-weight); }
+.rich-text h1 { font-family: var(--text-title-font, var(--font-family)); font-size: var(--text-title-size); line-height: var(--text-title-line-height); font-weight: var(--text-title-weight); margin: 0.1em 0 0.35em; }
+.rich-text h2 { font-family: var(--text-heading-font, var(--font-family)); font-size: var(--text-heading-size); line-height: var(--text-heading-line-height); font-weight: var(--text-heading-weight); margin: 0.2em 0 0.35em; }
+.rich-text h3 { font-family: var(--text-subheading-font, var(--font-family)); font-size: var(--text-subheading-size); line-height: var(--text-subheading-line-height); font-weight: var(--text-subheading-weight); margin: 0.6em 0 0.35em; }
+.rich-text .text-small { font-family: var(--text-small-font, var(--font-family)); font-size: var(--text-small-size); line-height: var(--text-small-line-height); font-weight: var(--text-small-weight); }
 
 /* Alignment and highlights from the text toolbar */
 .align-center { text-align: center; }
@@ -233,16 +264,19 @@ mark { color: inherit; padding: 0 .12em; border-radius: .2em; background: #fff1a
 
 /* ---------- Blog post page ---------- */
 
-.post-header { max-width: var(--page-width); margin: 0 auto 28px; padding: 0 calc(var(--block-spacing) + 8px); }
+.post-header { max-width: var(--page-width); margin: 40px auto 8px; padding: 0 calc(var(--block-spacing) + 8px); }
 .post-header__date { margin: 0 0 6px; color: var(--secondary-color); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-size: 0.9rem; }
-.post-header__title { margin: 0; font-size: var(--text-title-size); line-height: var(--text-title-line-height); font-weight: var(--text-title-weight); }
+.post-header__title { margin: 0; font-family: var(--text-title-font, var(--font-family)); font-size: var(--text-title-size); line-height: var(--text-title-line-height); font-weight: var(--text-title-weight); }
 .post-header__cover { margin: 24px 0 0; border-radius: var(--border-radius); overflow: hidden; aspect-ratio: 21 / 9; background: var(--soft-color); }
 .post-header__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* ---------- Website name & site menu (header parts) ---------- */
 
 .block-site-title { display: flex; align-items: center; }
-.site-title { font-size: 1.55rem; font-weight: 700; color: var(--text-color); text-decoration: none; line-height: 1.2; }
+.site-title { display: inline-flex; align-items: center; gap: 12px; font-size: 1.55rem; font-weight: 700; color: var(--text-color); text-decoration: none; line-height: 1.2; }
+.site-title { max-width: 100%; }
+.site-title__logo { display: block; width: auto; max-width: 100%; object-fit: contain; flex: none; }
+.site-title__name { min-width: 0; overflow-wrap: anywhere; }
 .block-menu { display: flex; align-items: center; }
 .block-menu--left { justify-content: flex-start; }
 .block-menu--center { justify-content: center; }
@@ -251,6 +285,10 @@ mark { color: inherit; padding: 0 .12em; border-radius: .2em; background: #fff1a
 .site-menu a { display: block; padding: 8px 16px; border-radius: 999px; color: var(--text-color); text-decoration: none; }
 .site-menu a:hover { background: var(--soft-color); }
 .site-menu a[aria-current="page"] { background: var(--primary-color); color: #fff; }
+/* Hamburger (phones only): a hidden checkbox + its label, no JavaScript */
+.block-menu { flex-wrap: wrap; }
+.site-menu__toggle { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+.site-menu__burger { display: none; }
 
 /* ---------- Hero image (Header settings) ---------- */
 
@@ -292,8 +330,31 @@ mark { color: inherit; padding: 0 .12em; border-radius: .2em; background: #fff1a
   }
   .editor-block { grid-column: 1 / -1 !important; grid-row: auto !important; }
   .site-header .region-grid, .site-footer .region-grid { grid-auto-rows: auto; gap: 10px; }
-  .block-menu { justify-content: flex-start; }
-  .site-menu { margin-left: -12px; }
+  /* Header on phones: name/logo on the left, hamburger on the right; the
+     menu opens as a full-width panel that drops down over the page. */
+  .site-header .region-grid { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+  .site-header { position: relative; }
+  .site-header .editor-block { flex: 0 1 auto; }
+  .site-header .block-site-title { flex: 1 1 0; min-width: 0; }
+  .site-title { font-size: 1.3rem; }
+  .site-header .block-menu { flex: 0 0 auto; justify-content: flex-end; }
+  .site-menu__burger { display: inline-flex; flex-direction: column; justify-content: center; gap: 5px; width: 44px; height: 44px; padding: 10px; cursor: pointer; border-radius: var(--border-radius); }
+  .site-menu__burger span { display: block; height: 2px; background: currentColor; border-radius: 2px; transition: transform .2s, opacity .2s; }
+  .site-menu__toggle:focus-visible + .site-menu__burger { outline: 3px solid var(--primary-color); }
+  .block-menu .site-menu { display: none; position: absolute; left: 0; right: 0; top: 100%; z-index: 30; flex-direction: column; margin: 0; padding: 8px 18px 14px; background: var(--page-bg); border-top: 1px solid var(--line-color); border-bottom: 1px solid var(--line-color); box-shadow: 0 14px 28px rgba(0, 0, 0, .1); }
+  /* Footer menus stay a plain list of links. */
+  .site-footer .site-menu__burger { display: none; }
+  .site-footer .block-menu .site-menu { display: flex; position: static; flex-direction: row; box-shadow: none; border: 0; padding: 0; background: none; }
+  .site-footer .site-menu a { padding: 6px 10px; }
+  .site-menu__toggle:checked ~ .site-menu { display: flex; }
+  .site-menu__toggle:checked + .site-menu__burger span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .site-menu__toggle:checked + .site-menu__burger span:nth-child(2) { opacity: 0; }
+  .site-menu__toggle:checked + .site-menu__burger span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+  .site-menu a { padding: 12px 14px; border-radius: 0; }
+  .site-header--hero .block-menu .site-menu { background: rgba(0, 0, 0, .8); }
+  .section-row { grid-template-columns: 1fr; }
+  .section-row--split { padding: 16px 18px; }
+  .section-row--full .page-section { padding: 28px 0; }
   .site-main { padding: 24px 0 56px; }
   .post-header { padding: 0 18px; }
   .block-image__media, .block-card__media { position: static; }
